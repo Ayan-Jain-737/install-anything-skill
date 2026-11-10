@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Community & Questions (GitHub Discussions)
+    url: https://github.com/Ayan-Jain-737/install-anything-skill/discussions
+    about: Ask questions, share ideas, or discuss features with the community.
+  - name: 🔒 Security Vulnerability Reporting
+    url: https://github.com/Ayan-Jain-737/install-anything-skill/security/advisories/new
+    about: Privately disclose potential security vulnerabilities.

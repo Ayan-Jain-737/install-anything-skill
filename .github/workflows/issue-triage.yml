@@ -1,0 +1,38 @@
+name: Issue Triage & Welcome
+
+on:
+  issues:
+    types: [ opened ]
+
+permissions:
+  issues: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Welcome issue author and acknowledge SLA
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const author = issue.user.login;
+            
+            const message = `👋 Hi @${author}! Thank you for opening this issue in **install-anything-skill (ias)**.
+
+            ⏱️ **SLA Commitment**: We aim to review and respond to every issue within 24 hours.
+
+            **Helpful Resources**:
+            - 📖 [Documentation & Quickstart](https://github.com/Ayan-Jain-737/install-anything-skill#readme)
+            - 🛠️ [Contributing Guide](https://github.com/Ayan-Jain-737/install-anything-skill/blob/main/CONTRIBUTING.md)
+            - 🌟 [Good First Issues](https://github.com/Ayan-Jain-737/install-anything-skill/blob/main/.github/GOOD_FIRST_ISSUES.md)
+            - 💬 [Community Discussions](https://github.com/Ayan-Jain-737/install-anything-skill/discussions)
+
+            A maintainer will review your issue shortly!`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: message
+            });

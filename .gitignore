@@ -2,11 +2,7 @@
 node_modules/
 package-lock.json.bak
 
-# Tests & Test Artifacts
-tests/
-test/
-*.test.js
-*.spec.js
+# Test coverage & runner outputs
 coverage/
 .nyc_output/
 test-results/
@@ -21,6 +17,7 @@ remotion.config.ts
 tsconfig.json
 scripts/*.mjs
 scripts/*.py
+!scripts/generate_assets.py
 
 # Internal Developer & Non-User Files
 HANDOFF.md
@@ -48,10 +45,8 @@ cache/
 assets/.hallmark/
 brag-output*/
 
-# Netlify deployment and local state
+# Netlify local state
 .netlify/
-netlify.toml
-assets/
 
 # Environment & credentials
 .env
@@ -59,6 +54,9 @@ assets/
 .env.*.local
 *.pem
 *.key
+*.pfx
+credentials.json
+token.json
 
 # Logs
 logs/

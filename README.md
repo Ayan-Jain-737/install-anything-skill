@@ -1,18 +1,28 @@
-# install-anything-skill
+# install-anything-skill (`ias`)
 
+> **The 1-command installer for AI coding agents that turns any GitHub repository into an active skill.**
+
+[![CI](https://github.com/Ayan-Jain-737/install-anything-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/Ayan-Jain-737/install-anything-skill/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/install-anything-skill.svg)](https://www.npmjs.com/package/install-anything-skill)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-lightgreen.svg)](https://nodejs.org/)
-[![Keywords](https://img.shields.io/badge/-GitHub-lightgray.svg?logo=github)](https://github.com/Ayan-Jain-737/install-anything-skill)
+[![Discussions](https://img.shields.io/badge/Discussions-Join-blue.svg)](https://github.com/Ayan-Jain-737/install-anything-skill/discussions)
 
-> [!NOTE]
-> **Package Renamed & Migration**: This package was formerly published as `enlighten-agent-tool`. It has been renamed and upgraded to **`install-anything-skill`**, callable everywhere via the short acronym **`ias`** (and `install-anything`). The previous package `enlighten-agent-tool` is deprecated.
+```bash
+npm i -g install-anything-skill
+```
+*Or via curl installer:* `curl -fsSL https://raw.githubusercontent.com/Ayan-Jain-737/install-anything-skill/main/scripts/install.sh | bash`
 
 <div align="center">
 
-![install-anything-skill Preview](preview.png)
+![ias Demo](demo.gif)
+
+**[🌐 Try the Live Interactive Playground](https://install-anything-skill.netlify.app)** • **[🎬 Watch 15s Launch Video](out/ias-launch.mp4)**
 
 </div>
+
+> [!NOTE]
+> **Package Renamed & Migration**: This package was formerly published as `enlighten-agent-tool`. It has been renamed and upgraded to **`install-anything-skill`**, callable everywhere via the short acronym **`ias`** (and `install-anything`). The previous package `enlighten-agent-tool` is deprecated.
 
 ## Universal GitHub Repository & Skill Installer for AI Agents
 
@@ -257,6 +267,17 @@ Includes:
 
 ---
 
+## 🤝 Contributing & Community
+
+We welcome contributions from everyone!
+
+- 🌟 **First time?** Check out our [Good First Issues](.github/GOOD_FIRST_ISSUES.md).
+- 🛠️ **Development Guide**: Read the [Contributing Guide](CONTRIBUTING.md) for local setup, test execution, and PR workflow.
+- 💬 **Discussions**: Have questions or ideas? Join our [GitHub Discussions](https://github.com/Ayan-Jain-737/install-anything-skill/discussions).
+- ⏱️ **Our Promise**: Maintainers review and respond to every opened issue and PR within 24 hours.
+
+---
+
 ## 📄 License
 
-MIT © Ayan Jain
+MIT License © 2024-2026 [Ayan Jain](https://github.com/Ayan-Jain-737). See [LICENSE](LICENSE) for full details.

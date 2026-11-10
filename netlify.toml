@@ -1,0 +1,19 @@
+# Netlify configuration for Enlighten
+# Directs Netlify to serve assets/ containing index.html, tokens.css, and base.css
+
+[build]
+  publish = "assets"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

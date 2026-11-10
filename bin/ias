@@ -2,4 +2,5 @@
 /**
  * ias - Short alias for install-anything
  */
-require('./install-anything');
+const { runCLI } = require('./install-anything');
+runCLI();

@@ -618,8 +618,8 @@ class InstallAnythingCLI {
 }
 
 // CLI Execution
-if (require.main === module) {
-  const args = process.argv.slice(2);
+function runCLI(rawArgs = process.argv.slice(2)) {
+  const args = rawArgs;
   const cli = new InstallAnythingCLI({
     dryRun: args.includes('--dry-run')
   });
@@ -738,7 +738,12 @@ WORKFLOW:
   })();
 }
 
+if (require.main === module) {
+  runCLI();
+}
+
 module.exports = {
   InstallAnythingCLI,
-  EnlightCLI: InstallAnythingCLI
+  EnlightCLI: InstallAnythingCLI,
+  runCLI
 };

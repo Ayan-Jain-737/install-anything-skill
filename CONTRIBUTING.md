@@ -1,63 +1,101 @@
-# Contributing to install-anything-skill
+# Contributing to install-anything-skill (ias)
 
-Thank you for your interest in contributing to install-anything-skill! 🎉
+Thank you for your interest in contributing! 🎉 `ias` is built to make any open source code or tool immediately useful for AI coding agents.
 
-## Table of Contents
+---
 
-- [Code of Conduct](#code-of-conduct)
-- [How to Contribute](#how-to-contribute)
-- [Development Setup](#development-setup)
-- [Pull Request Process](#pull-request-process)
-- [Coding Standards](#coding-standards)
+## ⏱️ Fast Response SLA
+We value your time. **Maintainers review and reply to every issue and PR within 24 hours.**
 
-## Code of Conduct
+---
 
-Please be respectful and constructive in all interactions.
+## 🧭 Getting Started
 
-## How to Contribute
+### 1. Find an Issue
+- Check out our curated [🌟 Good First Issues](.github/GOOD_FIRST_ISSUES.md) for beginner-friendly, well-scoped tasks.
+- Join the conversation on [💬 GitHub Discussions](https://github.com/Ayan-Jain-737/install-anything-skill/discussions) to propose ideas or ask questions before starting major work.
 
-1. **Fork the repository**
-2. **Create your branch**: `git checkout -b feature/AmazingFeature`
-3. **Commit your changes**: `git commit -m 'Add some AmazingFeature'`
-4. **Push to the branch**: `git push origin feature/AmazingFeature`
-5. **Open a pull request**
+---
 
-## Development Setup
+## 💻 Local Development Setup
 
+### Prerequisites
+- Node.js >= 18.0.0
+- npm or pnpm
+- Git
+
+### Setup
 ```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/install-anything-skill
+# 1. Fork and clone the repository
+git clone https://github.com/YOUR_USERNAME/install-anything-skill.git
 cd install-anything-skill
 
-# Install dependencies
+# 2. Install dependencies
 npm install
 
-# Run tests
+# 3. Test running the CLI locally
+node bin/ias --help
+node bin/ias find react
+
+# 4. (Optional) Symlink globally for live local testing
+npm link
+ias --help
+```
+
+---
+
+## 🧪 Running Tests
+
+Always ensure the full test suite passes before opening a PR:
+
+```bash
+# Run all unit and integration tests
 npm test
 ```
 
-## Pull Request Process
+This runs:
+1. `tests/test-scanner.js`: Repository language, framework, and install method detection.
+2. `tests/test-skills.js`: Skill discovery, active-agent scoping, and global harness registration.
+3. `tests/test-finder.js`: Real-time and offline skill search engine.
+4. `tests/test-lifecycle.js`: End-to-end CLI lifecycle (`diagnose` -> `install` -> `list-installed` -> `uninstall`).
 
-1. Update `README.md` with details of changes if applicable
-2. Ensure all tests pass
-3. Follow conventional commit messages
-4. Request review from maintainers
+---
 
-## Coding Standards
+## 🌿 Pull Request Workflow
 
-- Write clean, readable code
-- Include appropriate comments
-- Follow existing code style
-- Add tests for new functionality
+1. **Create a topic branch**:
+   ```bash
+   git checkout -b feat/support-bun-installer
+   ```
+2. **Make your changes**:
+   - Write clean, readable code with comments where helpful.
+   - Follow the existing CommonJS structure.
+   - Add test cases in `tests/` covering your changes.
+3. **Run the test suite**:
+   ```bash
+   npm test
+   ```
+4. **Commit using Conventional Commits**:
+   - `feat: add bun package manager support`
+   - `fix: resolve active agent symlink in non-standard homedir`
+   - `docs: update quickstart instructions`
+   - `test: add unit tests for custom IAS_HOME`
+5. **Push and open a PR**:
+   - Push your branch to GitHub and open a pull request against `main`.
+   - Complete the PR template checklist.
 
-## Types of Contributions
+---
 
-- 🐛 **Bug fixes** - Report and fix issues
-- ✨ **Features** - Add new functionality  
-- 📝 **Documentation** - Improve docs and examples
-- 🔧 **Tooling** - Enhance build/dev experience
-- 🧪 **Tests** - Add or improve test coverage
+## 📋 Coding Standards
 
-## Questions?
+- **Zero Unused Directory Clutter**: Maintain active-agent scoping discipline. Never create folders for unused agents unless explicitly requested.
+- **Node.js Compatibility**: Support Node.js 18+ without experimental runtime flags.
+- **Fail Gracefully**: If network is unavailable, fall back to cached registries. Never throw unhandled rejections to the terminal user.
 
-Open an [issue](https://github.com/Ayan-Jain-737/install-anything-skill/issues) with your question.
+---
+
+## 💬 Community & Questions
+
+- **Questions & Discussions**: Use [GitHub Discussions](https://github.com/Ayan-Jain-737/install-anything-skill/discussions).
+- **Bug Reports**: Open an [Issue](https://github.com/Ayan-Jain-737/install-anything-skill/issues/new?template=bug_report.yml).
+- **Feature Requests**: Open an [Issue](https://github.com/Ayan-Jain-737/install-anything-skill/issues/new?template=feature_request.yml).
