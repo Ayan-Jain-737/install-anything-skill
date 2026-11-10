@@ -12,7 +12,7 @@ The **install-anything Uninstaller** safely removes any repository installed by 
 
 ## Features
 
-- ✅ **Complete Skill Unregistration**: Unregisters skills from Antigravity, Open Agents, Claude Code, Hermes, etc.
+- ✅ **Complete Skill Unregistration**: Unregisters skills across active agent harnesses (Claude Code, Cursor, Codex, Open Agents, Gemini, Hermes, etc.)
 - ✅ **Binary Cleanup**: Removes symlinks from `~/.local/bin`
 - ✅ **Repository Removal**: Deletes repo clones from `~/.install-anything/repos/`
 - ✅ **Registry Maintenance**: Updates `~/.install-anything/cache/installed.json` and `~/.agents/.skill-lock.json`

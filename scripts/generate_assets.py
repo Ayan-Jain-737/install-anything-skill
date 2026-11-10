@@ -131,9 +131,8 @@ def generate_social_preview():
         ly += 25
 
     os.makedirs("assets", exist_ok=True)
-    img.save("social-preview.png", "PNG", optimize=True)
     img.save("assets/social-preview.png", "PNG", optimize=True)
-    print(f"Generated social-preview.png (Dimensions: {W}x{H}, Size: {os.path.getsize('social-preview.png')} bytes)")
+    print(f"Generated assets/social-preview.png (Dimensions: {W}x{H}, Size: {os.path.getsize('assets/social-preview.png')} bytes)")
 
 def generate_demo_gif():
     # 860x480 resolution for clean README display
@@ -216,14 +215,6 @@ def generate_demo_gif():
     # Save animated GIF
     os.makedirs("assets", exist_ok=True)
     frames[0].save(
-        "demo.gif",
-        save_all=True,
-        append_images=frames[1:],
-        duration=durations,
-        loop=0,
-        optimize=True
-    )
-    frames[0].save(
         "assets/demo.gif",
         save_all=True,
         append_images=frames[1:],
@@ -231,7 +222,7 @@ def generate_demo_gif():
         loop=0,
         optimize=True
     )
-    print(f"Generated demo.gif (Size: {os.path.getsize('demo.gif')} bytes, Frames: {len(frames)})")
+    print(f"Generated assets/demo.gif (Size: {os.path.getsize('assets/demo.gif')} bytes, Frames: {len(frames)})")
 
 if __name__ == "__main__":
     generate_social_preview()

@@ -15,7 +15,7 @@ npm i -g install-anything-skill
 
 <div align="center">
 
-![ias Demo](demo.gif)
+![ias Demo](assets/demo.gif)
 
 **[🌐 Try the Live Interactive Playground](https://install-anything-skill.netlify.app)**
 
