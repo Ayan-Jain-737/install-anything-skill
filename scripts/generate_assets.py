@@ -87,20 +87,20 @@ def generate_social_preview():
     draw.text((78, 462), "$ npm i -g install-anything-skill", font=font_cmd, fill=(100, 240, 170))
 
     # Supported agent pills
-    agents = ["Gemini / Antigravity", "Claude Code", "Hermes", "OpenCode", "Codex"]
+    agents = ["Claude Code", "Cursor", "Codex", "Gemini", "Hermes", "OpenCode", "Zed"]
     ax = 60
     ay = 530
-    font_p = get_font(MONO_FONT_PATH, 12)
+    font_p = get_font(MONO_FONT_PATH, 11)
     for ag in agents:
         abox = font_p.getbbox(ag)
-        pw = (abox[2] - abox[0]) + 20
+        pw = (abox[2] - abox[0]) + 16
         draw.rounded_rectangle([ax, ay, ax + pw, ay + 28], radius=6, fill=(28, 35, 48), outline=(50, 62, 85))
-        draw.text((ax + 10, ay + 6), ag, font=font_p, fill=(200, 215, 240))
-        ax += pw + 12
+        draw.text((ax + 8, ay + 6), ag, font=font_p, fill=(200, 215, 240))
+        ax += pw + 10
 
     # Right column: Mini terminal window
     tx, ty, tw, th = 560, 60, 660, 520
-    draw_terminal_window(draw, tx, ty, tw, th, title="ias terminal — active harness")
+    draw_terminal_window(draw, tx, ty, tw, th, title="ias terminal — universal agent harness")
 
     # Terminal content
     tfont = get_font(MONO_FONT_PATH, 13)
@@ -118,9 +118,9 @@ def generate_social_preview():
         ("───────────────────────────────────────────────────", (80, 90, 115)),
         ("$ ias install vercel-labs/agent-skills", (100, 240, 170)),
         ("📦 Target Repository: vercel-labs/agent-skills", (200, 215, 235)),
-        ("⚡ Active Agent Detected: Antigravity / Gemini", (255, 180, 90)),
+        ("⚡ Active Agent Detected: Claude Code (auto-detected)", (255, 180, 90)),
         ("   Discovered: react-best-practices, next-cache", (200, 215, 235)),
-        ("✅ Registered to ~/.gemini/skills/ias & global store", (100, 240, 170)),
+        ("✅ Registered to ~/.claude/skills/ias & global store", (100, 240, 170)),
         ("✨ Ready for immediate execution!", (255, 230, 100)),
     ]
 
@@ -198,10 +198,10 @@ def generate_demo_gif():
         elif out_level >= 3:
             lines.append(("$ ias install vercel-labs/agent-skills", (100, 240, 170)))
             lines.append(("📦 Target Repository: vercel-labs/agent-skills", (200, 215, 235)))
-            lines.append(("⚡ Active Agent Detected: Antigravity / Gemini", (255, 180, 90)))
+            lines.append(("⚡ Active Agent Detected: Claude Code (auto-detected)", (255, 180, 90)))
 
         if out_level >= 4:
-            lines.append(("✅ Registered: ~/.gemini/skills/ias & ~/.agents/skills/", (100, 240, 170)))
+            lines.append(("✅ Registered: ~/.claude/skills/ias & ~/.agents/skills/", (100, 240, 170)))
             lines.append(("✨ Successfully installed! Active agent has immediate access.", (255, 230, 100)))
             lines.append(("$ " + ("█" if cursor else ""), (100, 240, 170)))
 

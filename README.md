@@ -32,12 +32,12 @@ npm i -g install-anything-skill
 
 | ✅ Core Capabilities | 🔧 Platform Support | 🌐 Build & Package Managers |
 |----------------------|---------------------|-----------------------------|
-| **Built-in Skill Discovery** (`ias find`) | **Antigravity / Gemini** (`~/.gemini/skills/ias`) | npm, yarn, pnpm, bun |
+| **Built-in Skill Discovery** (`ias find`) | **Claude Code** (`~/.claude/skills/ias`) | npm, yarn, pnpm, bun |
 | **Active-Agent Scoping** (Zero ghost folders) | **Open Agents** (`~/.agents/skills/ias`) | pip, uv, poetry, pipenv |
-| **Auto-Synthesis for Repos without SKILL.md** | **Claude Code** (`~/.claude/skills/ias`) | cargo (Rust compilation) |
-| **README-First Intelligence** | **Hermes** (`~/.hermes/skills/ias`) | go build, go install |
-| **Executable Binary Symlinks** (`~/.local/bin/ias`) | **OpenCode** (`~/.config/opencode/`) | gradle, maven |
-| **Full Lifecycle & Safe Rollback** | **Codex**, **Cursor**, **Zed** | cmake, make |
+| **Auto-Synthesis for Repos without SKILL.md** | **Cursor & Codex** (`~/.cursor/`, `~/.codex/`) | cargo (Rust compilation) |
+| **README-First Intelligence** | **Hermes & OpenCode** (`~/.hermes/`, `~/.config/opencode/`) | go build, go install |
+| **Executable Binary Symlinks** (`~/.local/bin/ias`) | **Gemini & Antigravity** (`~/.gemini/skills/ias`) | gradle, maven |
+| **Full Lifecycle & Safe Rollback** | **Zed & Custom Agent Harnesses** | cmake, make |
 
 </div>
 
@@ -51,7 +51,7 @@ npm i -g install-anything-skill
 | **Repos without `SKILL.md`** | ❌ Cannot install | ✅ **Auto-synthesizes skill wrapper** |
 | **Compiling & Building Code** | ❌ None (copies markdown only) | ✅ **Runs cargo, go, npm, pip, make** |
 | **Binary Tool Exposure** | ❌ No binary execution support | ✅ **Symlinks binaries to `~/.local/bin`** |
-| **Active Agent Directory Scoping** | ❌ Dumps into single generic folder | ✅ **Scopes to caller agent (AGY, Claude, etc.)** |
+| **Active Agent Directory Scoping** | ❌ Dumps into single generic folder | ✅ **Scopes to active caller agent (Claude, Cursor, Codex, Gemini, etc.)** |
 | **Zero Clutter Discipline** | ❌ May leave unused agent folders | ✅ **Never creates folders for unused agents** |
 | **Skill Discovery** | ✅ Remote registry search | ✅ **Live registry + Curated + Offline fallback** |
 | **Tool Repositories & CLIs** | ❌ Prompt skills only | ✅ **Discovers both skills & CLI utilities** |
@@ -87,7 +87,7 @@ cd install-anything-skill
 
 ### What Happens on Installation:
 - ✅ Links the `ias` executable directly to `~/.local/bin/ias` (along with `install-anything`, `install-anything-skill`, and `enlighten`).
-- ✅ Registers `ias`, `install-anything`, `install-anything-installer`, and `install-anything-uninstaller` skills into your active agent folder (e.g., `~/.gemini/skills/ias`) and global canonical storage (`~/.agents/skills/`), avoiding unwanted folders for other unused agents.
+- ✅ Registers skills directly into your active agent's folder (e.g., `~/.claude/skills/`, `~/.cursor/skills/`, `~/.gemini/skills/`, `~/.hermes/skills/`) and global canonical storage (`~/.agents/skills/`), avoiding ghost folders for unused agents.
 - ✅ Installs slash command `/ias` and `/install-anything` for supported agents (Claude Code, Hermes).
 - ✅ Updates `~/.agents/.skill-lock.json`.
 
@@ -107,8 +107,8 @@ ias install vercel-labs/agent-skills
 # Install by full URL
 ias install https://github.com/affaan-m/ECC
 
-# Explicitly target a specific agent harness
-ias install https://github.com/user/repo --agent gemini
+# Explicitly target a specific agent harness (claude, cursor, codex, gemini, hermes, opencode, etc.)
+ias install https://github.com/user/repo --agent claude
 
 # Preview installation without making changes (dry-run)
 ias install https://github.com/user/repo --dry-run
@@ -161,7 +161,7 @@ When an agent or developer runs `install-anything install <repo-url>`:
 ┌───────────▼──────────────────┐  ┌───────▼──────────────────────┐
 │ Register Discovered Skills   │  │ Auto-Synthesize Skill        │
 │ Link into ~/.agents/skills/  │  │ Generate SKILL.md wrapper for│
-│ & active agent (~/.gemini/)  │  │ the newly installed tool     │
+│ & active agent directory     │  │ the newly installed tool     │
 └───────────┬──────────────────┘  └───────┬──────────────────────┘
             └──────────────┬──────────────┘
                            │
@@ -173,8 +173,9 @@ When an agent or developer runs `install-anything install <repo-url>`:
                            │
 ┌──────────────────────────▼─────────────────────────────┐
 │ 4. Active-Agent Scoped Registration                    │
-│    • In AGY: registers to ~/.gemini/skills/ + global   │
-│    • Zero ghost directories for Codex or Zed           │
+│    • Auto-detects caller (Claude, Cursor, Codex, AGY)  │
+│    • Registers to active agent folder + global store   │
+│    • Zero ghost directories in unused agent folders    │
 │    • Updates ~/.agents/.skill-lock.json                │
 └────────────────────────────────────────────────────────┘
 ```
@@ -187,7 +188,7 @@ When an agent or developer runs `install-anything install <repo-url>`:
 |---------|-------------|
 | `ias find <query>` | Discover agent skills, packages, and CLI tool repos (e.g., `ias find react`) |
 | `ias install <url>` | Clone repo, compile binaries, register skills for active agent & global store |
-| `ias install <url> --agent <name>` | Explicitly target an agent harness (e.g. `gemini`, `claude`, `codex`) |
+| `ias install <url> --agent <name>` | Explicitly target an agent harness (e.g. `claude`, `cursor`, `gemini`, `hermes`) |
 | `ias diagnose <url>` | Analyze repository without installing (README guide, languages, frameworks, skills) |
 | `ias list-installed` | Show all managed installations, exposed binaries, and registered skills |
 | `ias uninstall <id> --force` | Safe removal of repository, binaries (`~/.local/bin`), and registered skills |
@@ -197,16 +198,19 @@ When an agent or developer runs `install-anything install <repo-url>`:
 
 ## 🌐 Supported Platforms & Active Directory Scoping
 
+`ias` works across the entire AI agent ecosystem. It automatically detects the active harness at runtime, or lets you target any harness with `--agent <name>`.
+
 | Agent Framework | Skills Directory | Scoping & Integration Behavior |
 |-----------------|------------------|--------------------------------|
-| **Antigravity / Gemini** | `~/.gemini/skills/ias` | Automatic runtime detection (`ANTIGRAVITY_AGENT`); zero pollution to unused agents |
-| **Open Agents** | `~/.agents/skills/ias` & `.skill-lock.json` | Canonical global store (`npx skills` compatible) |
 | **Claude Code** | `~/.claude/skills/ias` | Skills directory & `~/.claude/commands/ias.md` (`/ias`) |
+| **Open Agents** | `~/.agents/skills/ias` & `.skill-lock.json` | Canonical global store (`npx skills` compatible) |
+| **Cursor** | `~/.cursor/skills/` | Automatic runtime detection & targeted on demand (`--agent cursor`) |
+| **Codex** | `~/.codex/skills/` | Automatic runtime detection & targeted on demand (`--agent codex`) |
 | **Hermes** | `~/.hermes/skills/ias` | Skills directory & `~/.hermes/commands/ias.md` (`/ias`) |
 | **OpenCode** | `~/.config/opencode/skills/` | Config plugin / skill directory |
-| **Codex** | `~/.codex/skills/` | Targeted on demand (`--agent codex`) |
-| **Cursor** | `~/.cursor/skills/` | Targeted on demand (`--agent cursor`) |
+| **Antigravity / Gemini** | `~/.gemini/skills/ias` | Automatic runtime detection (`ANTIGRAVITY_AGENT`, `GEMINI_CLI`) |
 | **Zed** | `~/.zed/skills/` | Targeted on demand (`--agent zed`) |
+| **Custom / Headless** | `~/.agents/skills/` | Works with any agent reading standard `SKILL.md` directories |
 
 ---
 

@@ -4,7 +4,7 @@ description: >-
   Universal GitHub repository and skill installer for AI agent harnesses (Install Anything Skill).
   Use this skill whenever asked to install, download, import, or set up any GitHub repository,
   tool, library, or agent skill. It automatically detects project types, scans for skills,
-  registers discovered skills into the active caller agent's skill folder (e.g., Antigravity / Gemini)
+  registers discovered skills into the active caller agent's skill folder (Claude Code, Cursor, Codex, Gemini, Hermes, etc.)
   and global canonical storage (~/.agents/skills/), without modifying or creating unused agent directories,
   and executes build/install instructions suggested by the repository.
 ---
@@ -18,9 +18,12 @@ It automatically discovers skills inside repositories and registers them for the
 
 1. **Auto-Discovery of Skills**: Detects `SKILL.md` files at repository roots or in subdirectories (`skills/*/SKILL.md`, `.agents/skills/*`, etc.).
 2. **Active Agent & Global Registration**: Intelligently detects the calling agent and installs skills only for the active agent and global storage:
-   - Antigravity / Gemini (`~/.gemini/skills/`)
+   - Claude Code (`~/.claude/skills/`)
    - Open Agents (`~/.agents/skills/` & `~/.agents/.skill-lock.json`)
-   - Avoids creating or touching unused directories for other agents (like Codex, Zed, Cursor, etc.).
+   - Cursor & Codex (`~/.cursor/skills/`, `~/.codex/skills/`)
+   - Hermes & OpenCode (`~/.hermes/skills/`, `~/.config/opencode/`)
+   - Antigravity / Gemini (`~/.gemini/skills/`)
+   - Avoids creating or touching unused directories for other agents.
    - Can optionally target any specific harness with `--agent <name>` or all harnesses with `--all-agents`.
 3. **Automatic Skill Synthesis**: If a repository is a tool without an existing `SKILL.md`, `ias` generates an agent skill wrapper so agents can discover and use the newly installed tool.
 4. **Executes Repo Suggestions**: Detects package managers (`npm`, `pip`, `cargo`, `go`, etc.) and suggested build/install commands from `README.md`, executes them, and links binaries to `~/.local/bin`.

@@ -23,13 +23,15 @@ npm install -g install-anything-skill
 
 ## ⚡ Using `ias` in Agent Harnesses
 
-Once installed, `ias` is registered in all agent harnesses:
-- **Antigravity / Gemini**: `~/.gemini/skills/ias`
-- **Open Agents**: `~/.agents/skills/ias`
+Once installed, `ias` is registered across all agent harnesses:
 - **Claude Code**: `~/.claude/skills/ias` & `/ias` command
+- **Open Agents**: `~/.agents/skills/ias` & `~/.agents/.skill-lock.json`
+- **Cursor**: `~/.cursor/skills/`
+- **Codex**: `~/.codex/skills/`
 - **Hermes**: `~/.hermes/skills/ias` & `/ias` command
 - **OpenCode**: `~/.config/opencode/skills/`
-- **Codex / Cursor / Zed**: global skills
+- **Antigravity / Gemini**: `~/.gemini/skills/ias`
+- **Zed & Headless**: canonical global skills
 
 Ask your agent:
 > *"Use ias to install https://github.com/vercel-labs/agent-skills"*
@@ -85,7 +87,7 @@ ias uninstall vercel-labs-agent-skills --force
 When an agent runs `ias install <repo-url>`:
 1. Clones the repository to `~/.install-anything/repos/<owner>/<repo>`.
 2. Scans for language, framework, dependencies, and existing `SKILL.md` files.
-3. Automatically registers discovered skills into `~/.gemini/skills/` (for Antigravity) and canonical `~/.agents/skills/`.
+3. Automatically registers discovered skills into your active agent folder (e.g. `~/.claude/skills/`, `~/.cursor/skills/`, or `~/.gemini/skills/`) and canonical `~/.agents/skills/`.
 4. If no skills exist, auto-synthesizes a tailored `SKILL.md` tool wrapper.
 5. Runs suggested install commands (`npm install`, `pip install`, `cargo build`, etc.).
 6. Symlinks any tool binaries to `~/.local/bin/`.

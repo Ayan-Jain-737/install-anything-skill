@@ -23,4 +23,4 @@ Universal GitHub repository and skill installer for AI agent harnesses.
 /ias uninstall <id> --force
 ```
 
-Automatically detects language, framework, dependencies, and agent skills from any GitHub repository, registers skills into the calling agent's folder (e.g. `~/.gemini/skills/` for AGY) and global canonical storage (`~/.agents/skills/`), and configures executables for your environment without modifying unused agent folders.
+Automatically detects language, framework, dependencies, and agent skills from any GitHub repository, registers skills into your active agent's folder (Claude Code, Cursor, Codex, Gemini, Hermes, etc.) and global canonical storage (`~/.agents/skills/`), and configures executables for your environment without modifying unused agent folders.

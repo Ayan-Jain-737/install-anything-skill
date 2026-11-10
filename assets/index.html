@@ -410,7 +410,7 @@ footer {
       <div class="instrument">
         <div class="instrument-bar">
           <span>cli execution monitor</span>
-          <span class="instrument-status">active: antigravity/gemini</span>
+          <span class="instrument-status">active: universal agent harness</span>
         </div>
         <div class="instrument-nav">
           <button class="inst-tab active" onclick="switchRun('find')">find</button>
@@ -435,27 +435,27 @@ footer {
 
       <div class="harness-list">
         <div class="harness-item">
-          <h3 class="harness-title">Antigravity / Gemini</h3>
-          <div class="harness-path">~/.gemini/skills/ (active caller)</div>
-          <p class="harness-desc">Configured specifically when invoked in AGY sessions. Direct registration without residue.</p>
+          <h3 class="harness-title">Claude Code</h3>
+          <div class="harness-path">~/.claude/skills/ (adaptive)</div>
+          <p class="harness-desc">Auto-detected during Claude Code runtime. Synced directly with /ias slash commands.</p>
         </div>
 
         <div class="harness-item">
           <h3 class="harness-title">Open Agents</h3>
           <div class="harness-path">~/.agents/skills/ (cross-agent)</div>
-          <p class="harness-desc">Shared storage lockfile maintaining verified versions across team workflows.</p>
+          <p class="harness-desc">Shared canonical storage lockfile maintaining verified versions across workflows.</p>
         </div>
 
         <div class="harness-item">
-          <h3 class="harness-title">Claude Code</h3>
-          <div class="harness-path">~/.claude/skills/ (adaptive)</div>
-          <p class="harness-desc">Auto-detected during Claude Code runtime. Synced only when active.</p>
+          <h3 class="harness-title">Cursor & Codex</h3>
+          <div class="harness-path">~/.cursor/ & ~/.codex/</div>
+          <p class="harness-desc">Detected or targeted on demand. Zero ghost directories when not in use.</p>
         </div>
 
         <div class="harness-item">
-          <h3 class="harness-title">Codex / Zed</h3>
-          <div class="harness-path">unmodified (zero ghost)</div>
-          <p class="harness-desc">No ghost directories created for uninstalled harnesses. Filesystem stays clean.</p>
+          <h3 class="harness-title">Hermes & OpenCode</h3>
+          <div class="harness-path">~/.hermes/ & ~/.config/opencode/</div>
+          <p class="harness-desc">Integrated commands and skill dispatchers for open agent runtimes.</p>
         </div>
       </div>
     </div>
@@ -552,14 +552,14 @@ footer {
         '<span class="line-sky">query: ponlytail (fuzzy match -&gt; ponytail)</span>',
         '<span class="line-ink">1. ponytail [Installed] (15k installs)</span>',
         '<span class="line-dim">   source: dietrichgebert/ponytail</span>',
-        '<span class="line-green">   status: active in ~/.gemini/skills/</span>'
+        '<span class="line-green">   status: active across agent skills</span>'
       ],
       install: [
         '<span class="line-dim">$ ias install affaan-m/ECC</span>',
-        '<span class="line-sky">active agent detected: antigravity/gemini</span>',
-        '<span class="line-green">registered 24 skills in ~/.gemini/skills/</span>',
+        '<span class="line-sky">active agent detected: auto-detected (claude-code)</span>',
+        '<span class="line-green">registered 24 skills in ~/.claude/skills/ &amp; ~/.agents/skills/</span>',
         '<span class="line-dim">synced ~/.agents/.skill-lock.json</span>',
-        '<span class="line-ink">scope: .codex and .zed untouched</span>'
+        '<span class="line-ink">scope: unconfigured agent directories untouched (zero ghost)</span>'
       ],
       diagnose: [
         '<span class="line-dim">$ ias diagnose</span>',
@@ -569,7 +569,7 @@ footer {
       ],
       uninstall: [
         '<span class="line-dim">$ ias uninstall affaan-m/ECC</span>',
-        '<span class="line-sky">locating registrations in ~/.gemini/skills/</span>',
+        '<span class="line-sky">locating registrations in active harness &amp; global storage</span>',
         '<span class="line-green">removed 24 symlinks</span>',
         '<span class="line-ink">environment cleanly restored</span>'
       ]
