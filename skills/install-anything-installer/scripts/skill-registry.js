@@ -458,6 +458,19 @@ class SkillRegistry {
   }
 
   /**
+   * Atomic file writer to avoid reader/writer race conditions (L263)
+   */
+  atomicWriteFileSync(filePath, content) {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+    fs.writeFileSync(tmpPath, content, 'utf8');
+    fs.renameSync(tmpPath, filePath);
+  }
+
+  /**
    * Update ~/.agents/.skill-lock.json with newly registered skill.
    */
   updateSkillLock(repoUrl, skillInfo) {
@@ -481,62 +494,122 @@ class SkillRegistry {
     };
 
     try {
-      const lockDir = path.dirname(lockPath);
-      if (!fs.existsSync(lockDir)) {
-        fs.mkdirSync(lockDir, { recursive: true });
-      }
-      fs.writeFileSync(lockPath, JSON.stringify(lockData, null, 2));
+      this.atomicWriteFileSync(lockPath, JSON.stringify(lockData, null, 2));
     } catch {}
   }
 
   /**
-   * If a repository has no pre-existing SKILL.md, synthesize an agent skill for it!
+   * Synthesize an in-depth agent skill manual for any installed repository (L184)
    */
   generateSkillForRepo(repoDir, repoInfo = {}) {
     const name = (repoInfo.name || path.basename(repoDir)).toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     const description = repoInfo.description ||
-      `Provides tools, libraries, or commands from repository ${repoInfo.name || path.basename(repoDir)}`;
+      `Provides actionable tools, commands, and workflows for ${repoInfo.name || path.basename(repoDir)}`;
 
     const skillDir = path.join(repoDir, '.install-anything-skill');
     if (!fs.existsSync(skillDir)) {
       fs.mkdirSync(skillDir, { recursive: true });
     }
 
-    const commandsList = [];
-    if (repoInfo.binaries && repoInfo.binaries.length > 0) {
-      commandsList.push(...repoInfo.binaries.map(b => `- \`${b}\``));
-    } else {
-      commandsList.push(`- Installed in \`${repoDir}\``);
+    const binaries = repoInfo.binaries || [];
+    const isService = repoInfo.archetype === 'web-app' || repoInfo.hasDocker;
+
+    // Read README if present to extract real recipes
+    let readmeText = '';
+    const readmeCandidates = ['README.md', 'readme.md', 'README'];
+    for (const c of readmeCandidates) {
+      const p = path.join(repoDir, c);
+      if (fs.existsSync(p)) {
+        try { readmeText = fs.readFileSync(p, 'utf8'); break; } catch {}
+      }
     }
+
+    // Extract code blocks from README
+    const recipes = [];
+    if (readmeText) {
+      const codeRegex = /```(?:bash|sh|shell|console)?\s*\n([\s\S]*?)\n```/gi;
+      let match;
+      while ((match = codeRegex.exec(readmeText)) !== null) {
+        const lines = match[1].split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+        if (lines.length > 0 && lines.some(l => l.includes(name) || (binaries[0] && l.includes(binaries[0])) || l.startsWith('docker '))) {
+          recipes.push(lines.slice(0, 3).join('\n'));
+        }
+      }
+    }
+
+    // Safe attempt to extract --help output if binary exists
+    let cliHelpOutput = '';
+    if (binaries.length > 0) {
+      try {
+        const bin = binaries[0];
+        const out = require('child_process').execSync(`${bin} --help 2>&1 || true`, {
+          timeout: 2000,
+          stdio: 'pipe'
+        }).toString('utf8');
+        if (out && out.length > 30 && !out.includes('command not found')) {
+          cliHelpOutput = out.split('\n').slice(0, 25).join('\n');
+        }
+      } catch {}
+    }
+
+    const defaultRecipes = binaries.length > 0
+      ? [
+          `# Run standard verification\n${binaries[0]} --version`,
+          `# Basic execution\n${binaries[0]} <path-or-argument>`
+        ]
+      : [
+          `# Explore repository assets\nls -la ${repoDir}`
+        ];
+
+    const finalRecipes = recipes.length > 0 ? recipes.slice(0, 4) : defaultRecipes;
 
     const skillContent = `---
 name: ${name}
 description: >-
-  ${description}
-  Use this skill when working with or invoking ${name}.
+  ${description}. Use this skill when invoking, configuring, or running ${name}.
+version: ${repoInfo.version || '1.0.0'}
 ---
 
 # ${name}
 
 ${description}
 
-## Repository Location
-- Path: \`${repoDir}\`
-${repoInfo.repoUrl ? `- Source: ${repoInfo.repoUrl}` : ''}
+## Quick Reference & Core Triggers
+- **Repository Location**: \`${repoDir}\`
+${repoInfo.repoUrl ? `- **Source Repository**: ${repoInfo.repoUrl}` : ''}
+- **Primary Executable(s)**: ${binaries.length > 0 ? binaries.map(b => `\`${b}\``).join(', ') : '`Installed as local project`'}
+- **Verification Command**: \`${binaries[0] ? `${binaries[0]} --version` : 'ls -la ' + repoDir}\`
 
-## Usage & Commands
-${commandsList.join('\n')}
+## Command Synopsis & Key Flags
+${cliHelpOutput ? `\`\`\`text\n${cliHelpOutput}\n\`\`\`` : `
+- \`--help\`: Display built-in command documentation and available flags
+- \`--version\`: Check installed tool version
+- \`--json\`: Machine-readable structured output (if supported)
+`}
 
-${repoInfo.readmeSummary ? `## Summary from README\n${repoInfo.readmeSummary}\n` : ''}
+## High-Frequency Agent Recipes
+
+${finalRecipes.map((r, i) => `### Recipe ${i + 1}:\n\`\`\`bash\n${r}\n\`\`\``).join('\n\n')}
+
+${isService ? `## Service Endpoints & Workflows
+- **Default Port**: \`http://localhost:3000\`
+- **Container Startup**: \`docker run -d -p 3000:3000 ${name}\`
+- **Health Check**: \`curl -s http://localhost:3000/ || true\`
+` : ''}
+
+## Error Recovery & Troubleshooting
+1. **Command Not Found**: Ensure \`~/.local/bin\` is in your \`PATH\` environment variable (\`export PATH="$HOME/.local/bin:$PATH"\`).
+2. **Missing Configuration**: Check for project-level config files (e.g. \`.${name}.json\`, \`.env\`) in the working directory.
+3. **Permission Denied**: Verify executable permissions (\`chmod +x ~/.local/bin/${binaries[0] || name}\`).
 `;
 
     const skillMdPath = path.join(skillDir, 'SKILL.md');
-    fs.writeFileSync(skillMdPath, skillContent);
+    this.atomicWriteFileSync(skillMdPath, skillContent);
 
     return {
       name,
       description,
-      version: '1.0.0',
+      version: repoInfo.version || '1.0.0',
       skillDir,
       skillFilePath: skillMdPath,
       relativePath: '.install-anything-skill',
