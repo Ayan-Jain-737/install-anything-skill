@@ -485,6 +485,89 @@ class ScriptAdapter {
     };
   }
 
+  /**
+   * Deterministic OS and Arch regex matcher (eget heuristics)
+   */
+  matchReleaseAsset(assetList, targetEnv = {}) {
+    if (!Array.isArray(assetList) || assetList.length === 0) return null;
+
+    let targetOS = targetEnv.os || this.targetOS || 'linux';
+    if (targetOS === 'macos') targetOS = 'darwin';
+    let targetArch = targetEnv.arch || os.arch();
+    if (targetArch === 'x86_64') targetArch = 'x64';
+
+    const OS_PATTERNS = {
+      darwin: /(darwin|mac.?os|osx|apple)/i,
+      linux: /(linux|unknown-linux)/i,
+      windows: /(win|windows)/i
+    };
+
+    const ARCH_PATTERNS = {
+      x64: /(x64|amd64|x86[-_]?64)/i,
+      arm64: /(arm64|aarch64|armv8)/i,
+      x86: /(x32|x86[-_]?32|i?386)/i
+    };
+
+    const osRegex = OS_PATTERNS[targetOS] || OS_PATTERNS.linux;
+    const archRegex = ARCH_PATTERNS[targetArch] || ARCH_PATTERNS.x64;
+
+    const excludedExts = /\.(deb|rpm|msi|sha256|sha512|asc|sig|txt|md|html)$/i;
+
+    const candidates = assetList.filter(a => {
+      const name = a.name || a.browser_download_url || '';
+      if (!name || excludedExts.test(name)) return false;
+      return osRegex.test(name) && archRegex.test(name);
+    });
+
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0];
+
+    // Priority scoring:
+    // 1. Prefer archives (.tar.gz, .tgz, .zip, .tar.xz)
+    // 2. On Linux, prefer musl over gnu
+    // 3. Shorter filename often means cleaner target
+    candidates.sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+
+      let scoreA = 0;
+      let scoreB = 0;
+
+      if (/\.(tar\.gz|tgz)$/i.test(nameA)) scoreA += 10;
+      if (/\.(tar\.gz|tgz)$/i.test(nameB)) scoreB += 10;
+      if (/\.zip$/i.test(nameA)) scoreA += 8;
+      if (/\.zip$/i.test(nameB)) scoreB += 8;
+
+      if (targetOS === 'linux') {
+        if (/musl/i.test(nameA)) scoreA += 5;
+        if (/musl/i.test(nameB)) scoreB += 5;
+      }
+
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return nameA.length - nameB.length;
+    });
+
+    return candidates[0];
+  }
+
+  /**
+   * Matches skill names against a glob pattern (e.g. "react-*", "tdd*")
+   */
+  matchesSkillFilter(skillName, filterPattern) {
+    if (!filterPattern || filterPattern === '*' || filterPattern === 'all') return true;
+    if (!skillName) return false;
+
+    const cleanFilter = filterPattern.trim();
+    if (cleanFilter.includes(',')) {
+      const patterns = cleanFilter.split(',').map(p => p.trim());
+      return patterns.some(p => this.matchesSkillFilter(skillName, p));
+    }
+
+    const regexStr = '^' + cleanFilter.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$';
+    const regex = new RegExp(regexStr, 'i');
+    return regex.test(skillName);
+  }
+
   adapt(diagnostics) {
     return {
       status: 'adapted',
