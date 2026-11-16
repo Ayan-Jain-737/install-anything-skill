@@ -346,7 +346,43 @@ class InstallAnythingCLI {
         if (!fs.existsSync(targetDir)) {
           fs.mkdirSync(targetDir, { recursive: true });
         }
-      } else {
+      } else if (triage.archetype === 'cli-binary' && !options.forceClone) {
+        if (!isJson) {
+          console.log(`   🚀 Direct binary release available. Downloading executable without source cloning...`);
+        }
+        const binRes = await this.adapter.downloadReleaseBinary(norm.url, {
+          binDir: options.binDir
+        });
+        if (binRes && binRes.status === 'success') {
+          if (!isJson) {
+            console.log(`   ✅ Installed executable binary ${binRes.binaryName} (${binRes.version}) to ${binRes.binaryPath}`);
+          }
+          guideFollowed = true;
+          executedCommand = `binary-download:${binRes.binaryName}`;
+          if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+          }
+        } else {
+          if (!isJson) {
+            console.log(`   ℹ️ Direct binary download not available or failed; falling back to source...`);
+          }
+        }
+      } else if (triage.archetype === 'skill-pack' && !options.forceClone) {
+        if (!isJson) {
+          console.log(`   📦 Prompt skill repository. Extracting skill archive directly without git clone...`);
+        }
+        const tarRes = await this.adapter.downloadTarball(norm.url, targetDir);
+        if (tarRes && tarRes.success) {
+          guideFollowed = true;
+          executedCommand = 'tarball-extract';
+        } else {
+          if (!isJson) {
+            console.log(`   ℹ️ Tarball extraction failed; falling back to shallow clone...`);
+          }
+        }
+      }
+
+      if (!guideFollowed) {
         if (!isJson) {
           if (guide.hasGuide && guide.primarySuggestion) {
             console.log(`   ℹ️ Guided setup requires interactive terminal; proceeding with direct repository skill installation...`);
@@ -391,10 +427,16 @@ class InstallAnythingCLI {
       const skillsInRepo = this.skillRegistry.discoverSkills(targetDir);
       if (skillsInRepo.length > 0) {
         for (const s of skillsInRepo) {
+          if (options.skills && !this.adapter.matchesSkillFilter(s.name, options.skills)) {
+            continue;
+          }
           const res = this.skillRegistry.registerSkill(s, {
             repoUrl: norm.url,
             targetHarness: callerHarness,
-            allHarnesses: isAllHarnesses
+            allHarnesses: isAllHarnesses,
+            scope: options.scope,
+            local: options.local,
+            projectRoot: options.projectRoot
           });
           registeredSkillsManifest.push({
             name: s.name,
@@ -414,7 +456,10 @@ class InstallAnythingCLI {
         const res = this.skillRegistry.registerSkill(gen, {
           repoUrl: norm.url,
           targetHarness: callerHarness,
-          allHarnesses: isAllHarnesses
+          allHarnesses: isAllHarnesses,
+          scope: options.scope,
+          local: options.local,
+          projectRoot: options.projectRoot
         });
         registeredSkillsManifest.push({
           name: gen.name,
@@ -702,8 +747,13 @@ function runCLI(rawArgs = process.argv.slice(2)) {
   const isForce = args.includes('--force');
   const isDryRun = args.includes('--dry-run');
   const isAllAgents = args.includes('--all') || args.includes('--all-agents') || args.includes('--all-harnesses');
+  const isLocal = args.includes('--scope=local') || args.includes('-p') || (args.includes('--scope') && args[args.indexOf('--scope') + 1] === 'local');
+  const isForceClone = args.includes('--force-clone');
 
   let targetHarness = null;
+  let skillFilter = null;
+  let binDir = null;
+
   const filteredArgs = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--agent' || args[i] === '--harness' || args[i] === '--for') {
@@ -715,6 +765,22 @@ function runCLI(rawArgs = process.argv.slice(2)) {
       targetHarness = args[i].slice('--harness='.length);
     } else if (args[i].startsWith('--for=')) {
       targetHarness = args[i].slice('--for='.length);
+    } else if (args[i] === '--skills' || args[i] === '--filter') {
+      skillFilter = args[i + 1];
+      i++;
+    } else if (args[i].startsWith('--skills=')) {
+      skillFilter = args[i].slice('--skills='.length);
+    } else if (args[i].startsWith('--filter=')) {
+      skillFilter = args[i].slice('--filter='.length);
+    } else if (args[i] === '--bin-dir') {
+      binDir = args[i + 1];
+      i++;
+    } else if (args[i].startsWith('--bin-dir=')) {
+      binDir = args[i].slice('--bin-dir='.length);
+    } else if (args[i] === '--scope') {
+      i++;
+    } else if (args[i] === '-p' || args[i] === '--force-clone') {
+      // boolean flags handled above
     } else if (!args[i].startsWith('--')) {
       filteredArgs.push(args[i]);
     }
@@ -727,7 +793,7 @@ ias (Install Anything Skill) v${cli.version} - Universal AI Agent Repository & S
 USAGE:
     ias find <query> [--json]
     ias inspect <repo-url> [--json]
-    ias install <repo-url> [--agent <name>] [--all-agents] [--dry-run] [--force] [--json]
+    ias install <repo-url> [--agent <name>] [--scope <local|global>] [--skills <glob>] [--json]
     ias diagnose <repo-url> [--json]
     ias list-installed [--json]
     ias uninstall <identifier> [--force] [--dry-run] [--json]
@@ -746,6 +812,10 @@ COMMANDS:
 OPTIONS:
     --agent <name>      Explicitly target an agent harness (e.g. gemini, claude, codex, zed)
     --all-agents        Install into all agent harnesses instead of only the active agent
+    --scope <local|global> Target project-local (.agents/skills) or global (~/.agents/skills) [-p]
+    --skills <pattern>  Filter skills to install using glob pattern (e.g. --skills "react-*")
+    --bin-dir <path>    Custom directory for downloaded release binaries (default: ~/.local/bin)
+    --force-clone       Bypass zero-clone optimizations and force a full git clone
     --dry-run           Simulate installation without making filesystem changes
     --force             Reinstall or overwrite existing installation
     --json              Output results as formatted JSON
@@ -779,7 +849,12 @@ WORKFLOW:
           dryRun: isDryRun,
           targetHarness,
           allAgents: isAllAgents,
-          allHarnesses: isAllAgents
+          allHarnesses: isAllAgents,
+          scope: isLocal ? 'local' : 'global',
+          local: isLocal,
+          forceClone: isForceClone,
+          skills: skillFilter,
+          binDir
         });
         break;
 

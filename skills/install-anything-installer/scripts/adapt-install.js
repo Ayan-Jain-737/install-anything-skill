@@ -8,6 +8,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const https = require('https');
+const http = require('http');
 const { execSync } = require('child_process');
 
 class ScriptAdapter {
@@ -566,6 +568,302 @@ class ScriptAdapter {
     const regexStr = '^' + cleanFilter.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$';
     const regex = new RegExp(regexStr, 'i');
     return regex.test(skillName);
+  }
+
+  /**
+   * Helper to download a remote URL directly to a file following HTTP 3xx redirects
+   */
+  downloadToFile(url, destPath, maxRedirects = 5) {
+    return new Promise((resolve, reject) => {
+      if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
+      const client = url.startsWith('https:') ? https : http;
+      const headers = {
+        'User-Agent': 'ias-installer/3.1 (+https://github.com/Ayan-Jain-737/install-anything-skill)'
+      };
+      const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+      if (token && (url.includes('api.github.com') || url.includes('github.com'))) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const req = client.get(url, { headers }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          const redirectUrl = res.headers.location.startsWith('http')
+            ? res.headers.location
+            : new URL(res.headers.location, url).href;
+          return resolve(this.downloadToFile(redirectUrl, destPath, maxRedirects - 1));
+        }
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP ${res.statusCode} downloading ${url}`));
+        }
+        const out = fs.createWriteStream(destPath);
+        res.pipe(out);
+        out.on('finish', () => out.close(() => resolve(destPath)));
+        out.on('error', reject);
+      });
+      req.on('error', reject);
+      req.setTimeout(60000, () => {
+        req.destroy();
+        reject(new Error('Download timeout'));
+      });
+    });
+  }
+
+  /**
+   * Fetches latest release tag and downloadable asset list without hitting GitHub API rate limits.
+   * Probes /releases/latest redirect + expanded_assets/<tag> HTML, falling back to GitHub API.
+   */
+  async fetchReleaseAssets(owner, repo) {
+    // 1. If GitHub token is present, try direct API first
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (token) {
+      try {
+        const apiRes = await new Promise((resolve) => {
+          https.get(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+            headers: {
+              'User-Agent': 'ias-installer/3.1',
+              'Authorization': `Bearer ${token}`
+            }
+          }, (res) => {
+            let data = '';
+            res.on('data', d => data += d);
+            res.on('end', () => {
+              if (res.statusCode === 200) {
+                try {
+                  const json = JSON.parse(data);
+                  resolve({
+                    tag: json.tag_name,
+                    assets: (json.assets || []).map(a => ({
+                      name: a.name,
+                      browser_download_url: a.browser_download_url
+                    }))
+                  });
+                } catch { resolve(null); }
+              } else { resolve(null); }
+            });
+          }).on('error', () => resolve(null));
+        });
+        if (apiRes && apiRes.assets && apiRes.assets.length > 0) return apiRes;
+      } catch {}
+    }
+
+    // 2. Unauthenticated zero-rate-limit probe: follow /releases/latest redirect to extract tag
+    const tag = await new Promise((resolve) => {
+      https.get(`https://github.com/${owner}/${repo}/releases/latest`, {
+        headers: { 'User-Agent': 'ias-installer/3.1' }
+      }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          const m = res.headers.location.match(/\/releases\/tag\/(.+)$/);
+          resolve(m ? decodeURIComponent(m[1]) : null);
+        } else {
+          resolve(null);
+        }
+      }).on('error', () => resolve(null));
+    });
+
+    if (tag) {
+      // 3. Probe expanded_assets/<tag> HTML
+      const assets = await new Promise((resolve) => {
+        https.get(`https://github.com/${owner}/${repo}/releases/expanded_assets/${encodeURIComponent(tag)}`, {
+          headers: { 'User-Agent': 'ias-installer/3.1' }
+        }, (res) => {
+          let data = '';
+          res.on('data', c => data += c);
+          res.on('end', () => {
+            const regex = new RegExp(`href="(/${owner}/${repo}/releases/download/[^"]+)"`, 'g');
+            const list = [];
+            const seen = new Set();
+            let m;
+            while ((m = regex.exec(data)) !== null) {
+              const fullUrl = `https://github.com${m[1]}`;
+              const name = path.basename(m[1]);
+              if (!name.endsWith('.sha256') && !name.endsWith('.md5') && !seen.has(name)) {
+                seen.add(name);
+                list.push({ name, browser_download_url: fullUrl });
+              }
+            }
+            resolve(list);
+          });
+        }).on('error', () => resolve([]));
+      });
+
+      if (assets.length > 0) {
+        return { tag, assets };
+      }
+    }
+
+    // 4. Fallback: try unauthenticated API as last resort
+    try {
+      const apiRes = await new Promise((resolve) => {
+        https.get(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+          headers: { 'User-Agent': 'ias-installer/3.1' }
+        }, (res) => {
+          let data = '';
+          res.on('data', d => data += d);
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              try {
+                const json = JSON.parse(data);
+                resolve({
+                  tag: json.tag_name,
+                  assets: (json.assets || []).map(a => ({
+                    name: a.name,
+                    browser_download_url: a.browser_download_url
+                  }))
+                });
+              } catch { resolve(null); }
+            } else { resolve(null); }
+          });
+        }).on('error', () => resolve(null));
+      });
+      if (apiRes) return apiRes;
+    } catch {}
+
+    return null;
+  }
+
+  /**
+   * Downloads a release binary for the current platform and installs to ~/.local/bin/
+   */
+  async downloadReleaseBinary(repoUrl, options = {}) {
+    const clean = repoUrl.trim();
+    const match = clean.match(/github\.com[/:]([^/]+)\/([^/.]+)/i) || clean.match(/^([^/]+)\/([^/.]+)$/);
+    if (!match) return { status: 'error', message: 'Invalid repository identifier' };
+
+    const owner = match[1];
+    const repo = match[2];
+    const binDir = options.binDir || path.join(os.homedir(), '.local', 'bin');
+    if (!fs.existsSync(binDir)) {
+      fs.mkdirSync(binDir, { recursive: true });
+    }
+
+    const releaseInfo = await this.fetchReleaseAssets(owner, repo);
+    if (!releaseInfo || !releaseInfo.assets || releaseInfo.assets.length === 0) {
+      return { status: 'not_found', message: `No releases or assets found for ${owner}/${repo}` };
+    }
+
+    const targetOS = options.os || (os.platform() === 'darwin' ? 'darwin' : (os.platform() === 'win32' ? 'windows' : 'linux'));
+    const targetArch = options.arch || os.arch();
+    const matched = this.matchReleaseAsset(releaseInfo.assets, { os: targetOS, arch: targetArch });
+
+    if (!matched) {
+      return { status: 'unsupported', message: `No matching release asset for ${targetOS}-${targetArch}` };
+    }
+
+    const tmpDir = path.join(os.tmpdir(), `ias-download-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    try {
+      const assetFile = path.join(tmpDir, matched.name);
+      await this.downloadToFile(matched.browser_download_url, assetFile);
+
+      const extractDir = path.join(tmpDir, 'extracted');
+      fs.mkdirSync(extractDir, { recursive: true });
+
+      if (/\.(tar\.gz|tgz|tar\.xz)$/i.test(matched.name)) {
+        execSync(`tar -xf "${assetFile}" -C "${extractDir}"`, { stdio: 'pipe' });
+      } else if (/\.zip$/i.test(matched.name)) {
+        execSync(`unzip -q -o "${assetFile}" -d "${extractDir}"`, { stdio: 'pipe' });
+      } else {
+        // Raw executable
+        const targetBin = path.join(binDir, repo);
+        fs.copyFileSync(assetFile, targetBin);
+        fs.chmodSync(targetBin, 0o755);
+        return {
+          status: 'success',
+          binaryPath: targetBin,
+          binaryName: repo,
+          version: releaseInfo.tag,
+          assetName: matched.name
+        };
+      }
+
+      // Search extracted directory for executable matching repo name or any executable
+      const findExecutable = (dir) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            const found = findExecutable(fullPath);
+            if (found) return found;
+          } else if (entry.isFile()) {
+            if (entry.name === repo || entry.name === repo.toLowerCase() || entry.name.startsWith(repo)) {
+              return fullPath;
+            }
+          }
+        }
+        // Fallback: first non-document file
+        for (const entry of entries) {
+          if (entry.isFile() && !/\.(txt|md|sha256|json|pdf|png)$/i.test(entry.name)) {
+            return path.join(dir, entry.name);
+          }
+        }
+        return null;
+      };
+
+      const foundBin = findExecutable(extractDir);
+      if (!foundBin) {
+        return { status: 'error', message: 'Could not find executable in archive' };
+      }
+
+      const binaryName = path.basename(foundBin);
+      const targetBin = path.join(binDir, binaryName);
+      fs.copyFileSync(foundBin, targetBin);
+      fs.chmodSync(targetBin, 0o755);
+
+      return {
+        status: 'success',
+        binaryPath: targetBin,
+        binaryName,
+        version: releaseInfo.tag,
+        assetName: matched.name
+      };
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  }
+
+  /**
+   * Stream and unpack repository archive tarball without git clone (L160: minimize clones)
+   */
+  async downloadTarball(repoUrl, destDir, options = {}) {
+    const clean = repoUrl.trim();
+    const match = clean.match(/github\.com[/:]([^/]+)\/([^/.]+)/i) || clean.match(/^([^/]+)\/([^/.]+)$/);
+    if (!match) return { success: false, error: 'Invalid repo URL' };
+
+    const owner = match[1];
+    const repo = match[2];
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    const tmpTar = path.join(os.tmpdir(), `ias-tar-${Date.now()}.tar.gz`);
+    const tarballUrls = [
+      `https://github.com/${owner}/${repo}/archive/HEAD.tar.gz`,
+      `https://codeload.github.com/${owner}/${repo}/tar.gz/refs/heads/main`,
+      `https://codeload.github.com/${owner}/${repo}/tar.gz/refs/heads/master`
+    ];
+
+    let downloaded = false;
+    for (const url of tarballUrls) {
+      try {
+        await this.downloadToFile(url, tmpTar);
+        downloaded = true;
+        break;
+      } catch {}
+    }
+
+    if (!downloaded) {
+      return { success: false, error: 'Could not download tarball from GitHub' };
+    }
+
+    try {
+      execSync(`tar -xzf "${tmpTar}" --strip-components=1 -C "${destDir}"`, { stdio: 'pipe' });
+      return { success: true, destDir };
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      try { fs.unlinkSync(tmpTar); } catch {}
+    }
   }
 
   adapt(diagnostics) {

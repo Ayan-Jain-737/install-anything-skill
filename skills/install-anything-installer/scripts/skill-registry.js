@@ -141,79 +141,82 @@ class SkillRegistry {
   /**
    * Returns metadata for all supported agent harnesses on the current system.
    */
-  getHarnesses() {
+  getHarnesses(options = {}) {
+    const isLocal = options.scope === 'local' || options.local;
+    const base = isLocal ? (options.projectRoot || options.cwd || process.cwd()) : this.homedir;
+
     const list = [
       {
         id: 'gemini',
         name: 'Antigravity / Gemini',
-        skillsDir: path.join(this.homedir, '.gemini', 'skills'),
-        configDir: path.join(this.homedir, '.gemini'),
-        detected: fs.existsSync(path.join(this.homedir, '.gemini'))
+        skillsDir: path.join(base, '.gemini', 'skills'),
+        configDir: path.join(base, '.gemini'),
+        detected: fs.existsSync(path.join(base, '.gemini'))
       },
       {
         id: 'agents',
         name: 'Open Agents',
-        skillsDir: path.join(this.homedir, '.agents', 'skills'),
-        configDir: path.join(this.homedir, '.agents'),
-        detected: fs.existsSync(path.join(this.homedir, '.agents'))
+        skillsDir: path.join(base, '.agents', 'skills'),
+        configDir: path.join(base, '.agents'),
+        detected: fs.existsSync(path.join(base, '.agents'))
       },
       {
         id: 'claude',
         name: 'Claude Code',
-        skillsDir: process.env.CLAUDE_HOME
+        skillsDir: (!isLocal && process.env.CLAUDE_HOME)
           ? path.join(process.env.CLAUDE_HOME, 'skills')
-          : path.join(this.homedir, '.claude', 'skills'),
-        commandsDir: process.env.CLAUDE_HOME
+          : path.join(base, '.claude', 'skills'),
+        commandsDir: (!isLocal && process.env.CLAUDE_HOME)
           ? path.join(process.env.CLAUDE_HOME, 'commands')
-          : path.join(this.homedir, '.claude', 'commands'),
-        configDir: process.env.CLAUDE_HOME || path.join(this.homedir, '.claude'),
-        detected: fs.existsSync(process.env.CLAUDE_HOME || path.join(this.homedir, '.claude'))
+          : path.join(base, '.claude', 'commands'),
+        configDir: (!isLocal && process.env.CLAUDE_HOME) || path.join(base, '.claude'),
+        detected: fs.existsSync((!isLocal && process.env.CLAUDE_HOME) || path.join(base, '.claude'))
       },
       {
         id: 'hermes',
         name: 'Hermes',
-        skillsDir: process.env.HERMES_CONFIG_DIR
+        skillsDir: (!isLocal && process.env.HERMES_CONFIG_DIR)
           ? path.join(process.env.HERMES_CONFIG_DIR, 'skills')
-          : path.join(this.homedir, '.hermes', 'skills'),
-        commandsDir: process.env.HERMES_CONFIG_DIR
+          : path.join(base, '.hermes', 'skills'),
+        commandsDir: (!isLocal && process.env.HERMES_CONFIG_DIR)
           ? path.join(process.env.HERMES_CONFIG_DIR, 'commands')
-          : path.join(this.homedir, '.hermes', 'commands'),
-        configDir: process.env.HERMES_CONFIG_DIR || path.join(this.homedir, '.hermes'),
-        detected: fs.existsSync(process.env.HERMES_CONFIG_DIR || path.join(this.homedir, '.hermes'))
+          : path.join(base, '.hermes', 'commands'),
+        configDir: (!isLocal && process.env.HERMES_CONFIG_DIR) || path.join(base, '.hermes'),
+        detected: fs.existsSync((!isLocal && process.env.HERMES_CONFIG_DIR) || path.join(base, '.hermes'))
       },
       {
         id: 'opencode',
         name: 'OpenCode',
-        skillsDir: process.env.OPENCODE_CONFIG_DIR
+        skillsDir: (!isLocal && process.env.OPENCODE_CONFIG_DIR)
           ? path.join(process.env.OPENCODE_CONFIG_DIR, 'skills')
-          : path.join(this.homedir, '.config', 'opencode', 'skills'),
-        altSkillsDir: path.join(this.homedir, '.opencode', 'skills'),
-        configDir: process.env.OPENCODE_CONFIG_DIR || path.join(this.homedir, '.config', 'opencode'),
-        detected: fs.existsSync(process.env.OPENCODE_CONFIG_DIR || path.join(this.homedir, '.config', 'opencode')) ||
-                  fs.existsSync(path.join(this.homedir, '.opencode'))
+          : path.join(base, '.config', 'opencode', 'skills'),
+        altSkillsDir: path.join(base, '.opencode', 'skills'),
+        configDir: (!isLocal && process.env.OPENCODE_CONFIG_DIR) || path.join(base, '.config', 'opencode'),
+        detected: fs.existsSync((!isLocal && process.env.OPENCODE_CONFIG_DIR) || path.join(base, '.config', 'opencode')) ||
+                  fs.existsSync(path.join(base, '.opencode'))
       },
       {
         id: 'codex',
         name: 'Codex',
-        skillsDir: process.env.CODEX_HOME
+        skillsDir: (!isLocal && process.env.CODEX_HOME)
           ? path.join(process.env.CODEX_HOME, 'skills')
-          : path.join(this.homedir, '.codex', 'skills'),
-        configDir: process.env.CODEX_HOME || path.join(this.homedir, '.codex'),
-        detected: fs.existsSync(process.env.CODEX_HOME || path.join(this.homedir, '.codex'))
+          : path.join(base, '.codex', 'skills'),
+        configDir: (!isLocal && process.env.CODEX_HOME) || path.join(base, '.codex'),
+        detected: fs.existsSync((!isLocal && process.env.CODEX_HOME) || path.join(base, '.codex'))
       },
       {
         id: 'cursor',
         name: 'Cursor',
-        skillsDir: path.join(this.homedir, '.cursor', 'skills'),
-        configDir: path.join(this.homedir, '.cursor'),
-        detected: fs.existsSync(path.join(this.homedir, '.cursor'))
+        skillsDir: path.join(base, '.cursor', 'skills'),
+        configDir: path.join(base, '.cursor'),
+        detected: fs.existsSync(path.join(base, '.cursor'))
       },
       {
         id: 'zed',
         name: 'Zed',
-        skillsDir: path.join(this.homedir, '.zed', 'skills'),
-        configDir: path.join(this.homedir, '.zed'),
-        detected: fs.existsSync(path.join(this.homedir, '.zed'))
+        skillsDir: path.join(base, '.zed', 'skills'),
+        configDir: path.join(base, '.zed'),
+        detected: fs.existsSync(path.join(base, '.zed'))
       }
     ];
 
@@ -386,7 +389,9 @@ class SkillRegistry {
    * without creating or modifying folders for unused agents like codex or zed.
    */
   registerSkill(skillInfo, options = {}) {
-    const harnesses = this.getHarnesses();
+    const isLocal = options.scope === 'local' || options.local;
+    const base = isLocal ? (options.projectRoot || options.cwd || process.cwd()) : this.homedir;
+    const harnesses = this.getHarnesses({ scope: isLocal ? 'local' : 'global', projectRoot: base });
     const registeredHarnesses = [];
 
     // Determine target caller harness
@@ -394,8 +399,8 @@ class SkillRegistry {
     const normalizedTarget = callerHarness ? this.normalizeHarnessId(callerHarness) : null;
     const isAllHarnesses = Boolean(options.allHarnesses || options.allAgents);
 
-    // 1. Canonical location in ~/.agents/skills (global store) is always updated
-    const agentsDir = path.join(this.homedir, '.agents', 'skills');
+    // 1. Canonical location in .agents/skills (local or global) is always updated
+    const agentsDir = path.join(base, '.agents', 'skills');
     const canonicalDir = path.join(agentsDir, skillInfo.name);
 
     if (!this.dryRun) {
@@ -446,9 +451,9 @@ class SkillRegistry {
       }
     }
 
-    // Update ~/.agents/.skill-lock.json if relevant
+    // Update .skill-lock.json if relevant
     if (options.repoUrl && !this.dryRun) {
-      this.updateSkillLock(options.repoUrl, skillInfo);
+      this.updateSkillLock(options.repoUrl, skillInfo, { isLocal, base });
     }
 
     return {
@@ -473,8 +478,10 @@ class SkillRegistry {
   /**
    * Update ~/.agents/.skill-lock.json with newly registered skill.
    */
-  updateSkillLock(repoUrl, skillInfo) {
-    const lockPath = path.join(this.homedir, '.agents', '.skill-lock.json');
+  updateSkillLock(repoUrl, skillInfo, lockOptions = {}) {
+    const lockPath = lockOptions.isLocal
+      ? path.join(lockOptions.base, '.skill-lock.json')
+      : path.join(this.homedir, '.agents', '.skill-lock.json');
     let lockData = { version: 3, skills: {} };
     try {
       if (fs.existsSync(lockPath)) {
