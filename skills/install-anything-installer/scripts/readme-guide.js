@@ -428,6 +428,23 @@ class ReadmeGuide {
       }
     }
 
+    // Check if README explicitly mentions skills CLI or SKILL.md
+    if (!result.hasSkills) {
+      try {
+        const readme = await this.fetchReadme(repoInput);
+        if (readme && readme.content) {
+          const guide = this.parseInstallGuide(readme.content, repoInput);
+          if (guide && guide.primarySuggestion && guide.primarySuggestion.type === 'skills_cli') {
+            result.hasSkills = true;
+            result.skillCount = 1;
+          } else if (/skills\s+add\b/i.test(readme.content) || /\bSKILL\.md\b/i.test(readme.content)) {
+            result.hasSkills = true;
+            result.skillCount = 1;
+          }
+        }
+      } catch {}
+    }
+
     if (dockerfile || compose) result.hasDocker = true;
     if (gitmodules) result.submodules = true;
 
@@ -469,7 +486,7 @@ class ReadmeGuide {
       return result;
     }
 
-    // Archetype 4: Fullstack Web App / Service
+    // Archetype 4: Fullstack Web App / Service (checked before release binaries)
     if (dockerfile || compose) {
       result.archetype = 'web-app';
       result.requiresClone = false;
@@ -488,15 +505,48 @@ class ReadmeGuide {
           result.suggestedMethod = 'service-skill';
           return result;
         }
-        // Archetype 6: Pure library
-        result.archetype = 'library';
-        result.requiresClone = false;
-        result.suggestedMethod = 'library-reference';
-        return result;
       } catch {}
     }
 
+    // Archetype 2: CLI Binary with pre-compiled GitHub releases (Zero-Clone)
+    if (coords.owner && coords.repo && coords.owner !== 'local') {
+      const releaseProbe = await this.probeReleaseAvailability(coords.owner, coords.repo);
+      if (releaseProbe && releaseProbe.hasReleases) {
+        result.archetype = 'cli-binary';
+        result.requiresClone = false;
+        result.suggestedMethod = 'binary-release-download';
+        if (result.binaries.length === 0) {
+          result.binaries.push(coords.repo);
+        }
+        return result;
+      }
+    }
+
     return result;
+  }
+
+  /**
+   * Quick rate-limit-free probe to check if GitHub releases exist
+   */
+  probeReleaseAvailability(owner, repo) {
+    return new Promise((resolve) => {
+      if (!owner || !repo || owner === 'local') return resolve(null);
+      const req = https.get(`https://github.com/${owner}/${repo}/releases/latest`, {
+        headers: { 'User-Agent': 'ias-installer/3.1' }
+      }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && res.headers.location.includes('/releases/tag/')) {
+          const tag = path.basename(res.headers.location);
+          resolve({ hasReleases: true, tag });
+        } else {
+          resolve(null);
+        }
+      });
+      req.on('error', () => resolve(null));
+      req.setTimeout(8000, () => {
+        req.destroy();
+        resolve(null);
+      });
+    });
   }
 
   /**

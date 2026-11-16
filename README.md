@@ -47,15 +47,18 @@ npm i -g install-anything-skill
 
 | Capability | Traditional Skills CLI (`npx skills`) | ias (`install-anything-skill`) |
 | :--- | :--- | :--- |
-| **Any GitHub Repository** | ❌ Fails if not pre-packaged as a skill | ✅ **Works on ANY public or local repo** |
-| **Repos without `SKILL.md`** | ❌ Cannot install | ✅ **Auto-synthesizes skill wrapper** |
-| **Compiling & Building Code** | ❌ None (copies markdown only) | ✅ **Runs cargo, go, npm, pip, make** |
-| **Binary Tool Exposure** | ❌ No binary execution support | ✅ **Symlinks binaries to `~/.local/bin`** |
+| **Zero-Clone Architecture** | ❌ Full git clone of every repo | ✅ **Direct tarball streaming & binary downloads (Zero clones)** |
+| **Direct Binary Releases** | ❌ Cannot download release assets | ✅ **`eget`-style binary matcher & installer to `~/.local/bin`** |
+| **Fullstack & Monorepos** | ❌ Clones gigabytes of dead files | ✅ **Synthesizes operational service manual + Docker recipes** |
+| **Interactive Human Handoff** | ❌ Silent failure or hanging prompts | ✅ **Detailed markdown guide when user action is required** |
+| **Repos without `SKILL.md`** | ❌ Cannot install | ✅ **Auto-synthesizes deep multi-section manual with `--help`** |
+| **Project-Local Scoping** | ❌ Global dump only | ✅ **Supports `--scope local` (`-p`) to `./.agents/skills/`** |
+| **Selective Extraction** | ❌ All or nothing | ✅ **Glob pattern filtering with `--skills "react-*"`** |
+| **API Rate-Limit Immunity** | ❌ 60 req/hr GitHub REST limit | ✅ **Bypasses limits via raw CDN & direct release download redirects** |
 | **Active Agent Directory Scoping** | ❌ Dumps into single generic folder | ✅ **Scopes to active caller agent (Claude, Cursor, Codex, Gemini, etc.)** |
 | **Zero Clutter Discipline** | ❌ May leave unused agent folders | ✅ **Never creates folders for unused agents** |
 | **Skill Discovery** | ✅ Remote registry search | ✅ **Live registry + Curated + Offline fallback** |
-| **Tool Repositories & CLIs** | ❌ Prompt skills only | ✅ **Discovers both skills & CLI utilities** |
-| **Machine-Readable Agent JSON** | ❌ Plain terminal text | ✅ **Structured JSON with `--json`** |
+| **Machine-Readable Agent JSON** | ❌ Plain terminal text | ✅ **Structured JSON with `--json` for agent workflows** |
 
 ---
 
@@ -101,11 +104,28 @@ ias find react
 ias find testing
 ias find --json
 
-# 2. Install any GitHub repository (cleanly scoped to active agent & global store)
+# 2. Inspect repository archetype & install plan before modifying disk
+ias inspect anil-matcha/open-generative-ai
+ias inspect BurntSushi/ripgrep
+ias inspect --json
+
+# 3. Install any GitHub repository (cleanly scoped to active agent & global store)
+# Prompt skill pack (zero-clone tarball stream)
 ias install vercel-labs/agent-skills
 
-# Install by full URL
-ias install https://github.com/affaan-m/ECC
+# Selective skill extraction using glob patterns
+ias install vercel-labs/agent-skills --skills "react-*,tdd*"
+
+# Project-local installation (registers to ./.agents/skills/ instead of ~/.agents)
+ias install user/repo --scope local
+# or shorthand:
+ias install user/repo -p
+
+# Binary release download (zero-clone direct executable installation to ~/.local/bin)
+ias install BurntSushi/ripgrep
+
+# Fullstack app service manual synthesis without repository bloat
+ias install anil-matcha/open-generative-ai
 
 # Explicitly target a specific agent harness (claude, cursor, codex, gemini, hermes, opencode, etc.)
 ias install https://github.com/user/repo --agent claude
@@ -116,13 +136,13 @@ ias install https://github.com/user/repo --dry-run
 # Output machine-readable JSON for agent consumption
 ias install https://github.com/user/repo --json
 
-# 3. Diagnose repository before installing
+# 4. Diagnose repository before installing
 ias diagnose https://github.com/user/repo
 
-# 4. List all managed repositories, binaries, and registered skills
+# 5. List all managed repositories, binaries, and registered skills
 ias list-installed
 
-# 5. Safely remove a repository, unregister skills, and unlink binaries
+# 6. Safely remove a repository, unregister skills, and unlink binaries
 ias uninstall <identifier> --force
 ```
 

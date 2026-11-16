@@ -3,37 +3,42 @@ name: install-anything
 description: >-
   Universal GitHub repository and skill installer for AI agent harnesses.
   Use this skill whenever asked to install, download, import, or set up any GitHub repository,
-  tool, library, or agent skill. It automatically detects project types, scans for skills,
+  tool, library, or agent skill. It automatically detects repository archetypes, supports zero-clone
+  tarball and binary downloads, handles fullstack apps with operational service manuals,
   registers discovered skills into the active caller agent's skill folder (Claude Code, Cursor, Codex, Gemini, Hermes, etc.)
-  and global canonical storage (~/.agents/skills/), without modifying or creating unused agent directories,
+  and global canonical storage (~/.agents/skills/) or project-local storage (--scope local),
   and executes build/install instructions suggested by the repository.
 ---
 
 # install-anything - Universal Agent Skill & Repository Installer
 
-`install-anything` allows AI agents and developers to download and install any GitHub repository in one command.
-It automatically discovers skills inside repositories and registers them for the active agent harness and global storage.
+`install-anything` allows AI agents and developers to download, inspect, and install any GitHub repository or agent skill in one command.
+It automatically classifies repositories into 7 distinct archetypes, minimizes git clones through zero-clone tarball streaming and direct binary release asset downloads, synthesizes exhaustive `SKILL.md` manuals, and cleanly scopes skills to your active agent.
 
 ## Capabilities
 
-1. **Auto-Discovery of Skills**: Detects `SKILL.md` files at repository roots or in subdirectories (`skills/*/SKILL.md`, `.agents/skills/*`, etc.).
-2. **Active Agent & Global Registration**: Intelligently detects the calling agent and installs skills only for the active agent and global storage:
-   - Claude Code (`~/.claude/skills/`)
-   - Open Agents (`~/.agents/skills/` & `~/.agents/.skill-lock.json`)
-   - Cursor & Codex (`~/.cursor/skills/`, `~/.codex/skills/`)
-   - Hermes & OpenCode (`~/.hermes/skills/`, `~/.config/opencode/`)
-   - Antigravity / Gemini (`~/.gemini/skills/`)
-   - Avoids creating or touching unused directories for other agents.
-   - Can optionally target any specific harness with `--agent <name>` or all harnesses with `--all-agents`.
-3. **Automatic Skill Synthesis**: If a repository is a tool without an existing `SKILL.md`, install-anything generates an agent skill wrapper so agents can discover and use the newly installed tool.
-4. **Executes Repo Suggestions**: Detects package managers (`npm`, `pip`, `cargo`, `go`, etc.) and suggested build/install commands from `README.md`, executes them, and links binaries to `~/.local/bin`.
-5. **Full Lifecycle Management**: Includes diagnosis, installation, listing, and clean uninstallation.
+1. **Archetype Triage & Zero-Clone Architecture (P0)**:
+   - **Archetype 1 (`skill-pack`)**: Streams GitHub archive tarballs (`/archive/HEAD.tar.gz`) directly to extract `SKILL.md` files without full git history cloning. Supports glob filtering (`--skills "react-*"`).
+   - **Archetype 2 (`cli-binary`)**: Direct binary asset downloader using deterministic regex heuristics (OS, Arch, musl/gnu) and rate-limit-free HTML/CDN redirects. Installs directly to `~/.local/bin/` without cloning source code.
+   - **Archetype 3 (`cli-source`)**: Builds from source (`cargo build --release`, `go build`, `npm install -g`, `pip install`) when binaries are unavailable.
+   - **Archetype 4 (`web-app`)**: For fullstack web apps and monorepos (e.g. `open-generative-ai`), avoids cloning multi-gigabyte client/server bundles; synthesizes an operational service manual with Docker startup recipes and API endpoints.
+   - **Archetype 5 (`mcp-server`)**: Configures Model Context Protocol server definitions.
+   - **Archetype 6 (`library`)**: Identifies SDKs and packages for import.
+   - **Archetype 7 (`mixed-meta`)**: Handles complex multi-language repositories.
+2. **Interactive Human Handoff Report**: For non-AI applications or complex apps requiring Docker daemons, database seeding, or `.env` secrets, generates a clear markdown checklist guiding the agent on what to ask the user.
+3. **In-Depth Skill Manual Synthesis**: For repositories without pre-packaged `SKILL.md` files, dynamically extracts `--help` flags, subcommands, usage recipes, configuration options, and troubleshooting steps into an actionable multi-section manual.
+4. **Active-Agent & Project-Local Scoping**:
+   - **Active Agent**: Only touches your active harness (e.g., Antigravity/Gemini, Claude Code, Cursor) and global canonical storage (`~/.agents/skills/`). Never pollutes unused agent directories.
+   - **Project-Local Scoping (`--scope local` / `-p`)**: Scopes skills strictly to the local workspace (`./.agents/skills/`, `./.gemini/skills/`, etc.) with atomic `./.skill-lock.json`.
+5. **Rate-Limit Safe & Atomic Writes**:
+   - Bypasses GitHub API rate limits using `raw.githubusercontent.com` CDN manifests and direct release asset download redirects.
+   - Atomic file writes (`fs.renameSync`) eliminate reader/writer race conditions across multiple agents.
 
 ---
 
 ## Agent Usage Instructions
 
-When the user asks you to install, import, or set up a repository or skill, run the following:
+When the user asks you to install, import, inspect, or set up a repository or skill, run the following:
 
 ### 1. Discover Skills & Tool Repositories (Find)
 ```bash
@@ -41,103 +46,75 @@ install-anything find <query>
 ```
 Searches the open registry (`skills.sh`), curated battle-tested skills, and developer tool repositories.
 
-**Examples:**
 ```bash
 # Find skills or tools for React:
 install-anything find react
-
-# Find testing tools (Playwright, Vitest, Jest):
-install-anything find testing
 
 # Machine-readable output for agent consumption:
 install-anything find <query> --json
 ```
 
-### 2. Install Repository & Register Skills
+### 2. Inspect Repository Archetype & Install Plan (Inspect)
 ```bash
-install-anything install <repo-url-or-shorthand>
+install-anything inspect <repo-url-or-shorthand>
 ```
-*Fallback if CLI is not directly in PATH:*
+Analyzes the repository archetype, checks for pre-packaged skills, tests for zero-clone binary releases, and previews the installation plan without making any disk modifications.
+
 ```bash
-node ~/.gemini/skills/install-anything/scripts/dispatch.js install <repo-url-or-shorthand>
+# Preview fullstack app strategy without cloning:
+install-anything inspect anil-matcha/open-generative-ai
+
+# Preview binary tool release availability:
+install-anything inspect BurntSushi/ripgrep
 ```
 
-**Examples:**
+### 3. Install Repository & Register Skills
 ```bash
-# Install by GitHub shorthand:
+install-anything install <repo-url-or-shorthand> [options]
+```
+
+**Common Examples:**
+```bash
+# Zero-clone install of prompt skill pack:
 install-anything install vercel-labs/agent-skills
 
-# Install by full URL:
-install-anything install https://github.com/affaan-m/ECC
+# Selective skill extraction using glob patterns:
+install-anything install vercel-labs/agent-skills --skills "react-*,tdd*"
 
-# Machine-readable JSON output:
-install-anything install https://github.com/user/repo --json
+# Project-local installation (registers to ./.agents/skills/):
+install-anything install user/repo --scope local
+# or using shorthand:
+install-anything install user/repo -p
 
-# Preview without making changes:
-install-anything install https://github.com/user/repo --dry-run
+# Zero-clone release binary download:
+install-anything install BurntSushi/ripgrep
+
+# Fullstack app / service synthesis:
+install-anything install anil-matcha/open-generative-ai
+
+# Force a full git clone if source code is explicitly needed:
+install-anything install user/repo --force-clone
+
+# Preview without making filesystem changes:
+install-anything install user/repo --dry-run
+
+# Output structured JSON for agent pipelines:
+install-anything install user/repo --json
 ```
 
-### 3. Inspect Repository Before Installing (Diagnose)
+### 4. Diagnose Repository (Diagnose)
 ```bash
-install-anything diagnose https://github.com/user/repo
+install-anything diagnose <repo-url>
 ```
-Analyzes language, framework, dependencies, and skills without installing anything permanently.
+Parses targeted `## Installation` and `## Quickstart` sections of the repository's README to analyze dependencies and build commands.
 
-### 4. List All Managed Installations
+### 5. List Managed Installations
 ```bash
 install-anything list-installed
 ```
 
-### 5. Safe Removal (Uninstall)
+### 6. Safe Removal (Uninstall)
 ```bash
 install-anything uninstall <identifier> --force
 ```
-Removes the cloned repository and unregisters all associated skills from all global agent skill folders.
-
----
-
-## What Happens During Installation
-
-```
-1. Clone / Fetch Repo  → Downloaded into ~/.install-anything/repos/<owner>/<repo>
-2. Scan & Classify    → Detects language, framework, package manager & profile
-3. Skill Registration → Skills are linked into the active agent folder (~/.gemini/skills/)
-                         and canonical global storage (~/.agents/skills/)
-4. Repo Setup         → Runs repo-suggested commands (npm install, pip install, cargo build)
-5. Expose Binaries    → Symlinks tool executables into ~/.local/bin
-6. Registry Update    → Recorded in ~/.install-anything/cache/installed.json
-```
-
-## JSON Output Format
-
-When run with `--json`:
-```json
-{
-  "status": "success",
-  "identifier": "owner-repo",
-  "repo_url": "https://github.com/owner/repo.git",
-  "install_dir": "/home/user/.install-anything/repos/owner/repo",
-  "profile": "web-developer",
-  "skills_registered": [
-    {
-      "name": "my-skill",
-      "path": "/home/user/.install-anything/repos/owner/repo/skills/my-skill",
-      "registeredHarnesses": ["Open Agents", "Antigravity / Gemini"]
-    }
-  ],
-  "exposed_binaries": ["my-cli"],
-  "commands_run": ["npm install", "npm run build"]
-}
-```
-
-## Troubleshooting
-
-- **Permission error**: Ensure write access to `~/.gemini/skills/` and `~/.agents/skills/`.
-- **Command not found**: Ensure `~/.local/bin` is in your `PATH`:
-  ```bash
-  export PATH="$HOME/.local/bin:$PATH"
-  ```
-- **Reinstall existing repo**: Add the `--force` flag:
-  ```bash
-  install-anything install <repo-url> --force
-  ```
+Removes repository files and unregisters skills from both the active agent directory and canonical storage.
