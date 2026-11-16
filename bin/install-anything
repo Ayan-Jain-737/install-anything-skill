@@ -860,6 +860,80 @@ class InstallAnythingCLI {
 
     return results;
   }
+
+  printUpdateNotice(latest) {
+    if (process.stdout.isTTY && !process.env.CI) {
+      console.error(`\n💡 Update available: ${this.version} → ${latest}`);
+      console.error(`   Run "ias update" or "npm i -g install-anything-skill@latest" to update.\n`);
+    }
+  }
+
+  checkForUpdates() {
+    try {
+      const cacheFile = path.join(this.cacheDir, 'update-check.json');
+      const now = Date.now();
+      if (fs.existsSync(cacheFile)) {
+        try {
+          const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+          if (now - cached.lastChecked < 86400000) {
+            if (cached.latest && cached.latest !== this.version) {
+              this.printUpdateNotice(cached.latest);
+            }
+            return;
+          }
+        } catch {}
+      }
+      const https = require('https');
+      const req = https.get('https://registry.npmjs.org/install-anything-skill/latest', {
+        headers: { 'User-Agent': 'ias-update-check' },
+        timeout: 2500
+      }, res => {
+        if (res.statusCode === 200) {
+          let data = '';
+          res.on('data', d => data += d);
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              const latest = json.version;
+              fs.writeFileSync(cacheFile, JSON.stringify({ lastChecked: now, latest }));
+              if (latest && latest !== this.version) {
+                this.printUpdateNotice(latest);
+              }
+            } catch {}
+          });
+        }
+      });
+      req.on('error', () => {});
+      req.setTimeout(2500, () => { req.destroy(); });
+    } catch {}
+  }
+
+  async updateCLI(options = {}) {
+    const isJson = options.json;
+    if (!isJson) console.log(`\n🔄 Updating install-anything-skill (current: v${this.version})...`);
+    try {
+      execFileSync('npm', ['install', '-g', 'install-anything-skill@latest'], { stdio: isJson ? 'pipe' : 'inherit' });
+      if (!isJson) console.log(`✅ Successfully updated install-anything-skill to latest version!`);
+      this.skillRegistry.syncAllGlobalSkills();
+      return { status: 'success', current: this.version };
+    } catch (err) {
+      if (!isJson) console.log(`⚠️  npm global update notice: ${err.message}. Trying curl installer...`);
+      try {
+        execSync(`curl -fsSL https://raw.githubusercontent.com/Ayan-Jain-737/install-anything-skill/main/scripts/install.sh | bash`, {
+          stdio: isJson ? 'pipe' : 'inherit'
+        });
+        if (!isJson) console.log(`✅ Successfully reinstalled via curl installer!`);
+        return { status: 'success' };
+      } catch (e2) {
+        if (isJson) {
+          console.log(JSON.stringify({ status: 'error', message: e2.message }));
+        } else {
+          console.error(`❌ Update failed. Please run manually: npm install -g install-anything-skill@latest`);
+        }
+        return { status: 'error', message: e2.message };
+      }
+    }
+  }
 }
 
 // CLI Execution
@@ -923,6 +997,7 @@ USAGE:
     ias diagnose <repo-url> [--json]
     ias list-installed [--json]
     ias uninstall <identifier> [--force] [--dry-run] [--json]
+    ias update          Update ias to the latest release on npm / GitHub.
     ias --help
     (alias: install-anything)
 
@@ -933,6 +1008,7 @@ COMMANDS:
                         and register skills for the active agent harness and global store.
     diagnose <url>      Check README & repository without installing.
     list-installed      Show all managed installations and registered skills.
+    update              Update ias and its registered skills to the latest version.
     uninstall <id>      Safely remove a repository and unregister its skills.
 
 OPTIONS:
@@ -957,8 +1033,16 @@ WORKFLOW:
   const cmd = filteredArgs[0].toLowerCase();
   const target = filteredArgs[1];
 
+  if (!isJson && cmd !== 'update' && cmd !== 'upgrade') {
+    cli.checkForUpdates();
+  }
+
   (async () => {
     switch (cmd) {
+      case 'update':
+      case 'upgrade':
+        await cli.updateCLI({ json: isJson });
+        break;
       case 'find':
       case 'search':
         await cli.findSkills(target || '', { json: isJson });
