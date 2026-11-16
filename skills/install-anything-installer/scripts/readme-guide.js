@@ -1,26 +1,94 @@
 #!/usr/bin/env node
 /**
  * readme-guide.js
- * Inspects a repository's README at Step 1 to extract and execute
- * the author's official installation guide and commands.
+ * Rate-limit-safe Repo Triage & Readme Guide Engine for install-anything-skill
+ *
+ * Implements:
+ * 1. Raw CDN manifest fetching (raw.githubusercontent.com) - 0 API rate limit quota
+ * 2. Local HTTP/manifest caching with TTL
+ * 3. 7-Archetype classification before cloning
+ * 4. Targeted section parsing (handles big complex READMEs without regex confusion)
+ * 5. Interactive Human Handoff Report generator for complex non-AI apps
  */
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const https = require('https');
 const http = require('http');
+const crypto = require('crypto');
 
 class ReadmeGuide {
   constructor(options = {}) {
+    this.homedir = options.homedir || os.homedir();
     this.timeout = options.timeout || 15000;
+    this.cacheDir = options.cacheDir || path.join(this.homedir, '.install-anything', 'cache', 'http');
+    this.ttl = options.ttl || 3600 * 1000; // 1 hour default cache
+    this.ensureDirs();
   }
 
+  ensureDirs() {
+    if (!fs.existsSync(this.cacheDir)) {
+      try {
+        fs.mkdirSync(this.cacheDir, { recursive: true });
+      } catch {}
+    }
+  }
+
+  getCacheKey(url) {
+    return crypto.createHash('sha256').update(url).digest('hex');
+  }
+
+  getCached(url) {
+    try {
+      const key = this.getCacheKey(url);
+      const filePath = path.join(this.cacheDir, `${key}.json`);
+      if (fs.existsSync(filePath)) {
+        const item = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (Date.now() - item.timestamp < this.ttl) {
+          return item.data;
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  setCache(url, data) {
+    try {
+      const key = this.getCacheKey(url);
+      const filePath = path.join(this.cacheDir, `${key}.json`);
+      fs.writeFileSync(filePath, JSON.stringify({
+        url,
+        timestamp: Date.now(),
+        data
+      }));
+    } catch {}
+  }
+
+  /**
+   * Safe fetch with token passthrough and local caching
+   */
   fetchUrl(url, maxRedirects = 3) {
-    return new Promise((resolve, reject) => {
-      if (maxRedirects < 0) return reject(new Error('Too many redirects'));
+    const cached = this.getCached(url);
+    if (cached !== null) {
+      return Promise.resolve(cached);
+    }
+
+    return new Promise((resolve) => {
+      if (maxRedirects < 0) return resolve(null);
 
       const client = url.startsWith('https') ? https : http;
-      const req = client.get(url, { headers: { 'User-Agent': 'install-anything-skill' } }, (res) => {
+      const headers = {
+        'User-Agent': 'ias-installer/3.1 (+https://github.com/Ayan-Jain-737/install-anything-skill)'
+      };
+
+      // Token passthrough if GitHub API or private repo
+      const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+      if (token && url.includes('github.com')) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const req = client.get(url, { headers }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           return resolve(this.fetchUrl(res.headers.location, maxRedirects - 1));
         }
@@ -29,7 +97,10 @@ class ReadmeGuide {
         }
         let data = '';
         res.on('data', chunk => data += chunk);
-        res.on('end', () => resolve(data));
+        res.on('end', () => {
+          this.setCache(url, data);
+          resolve(data);
+        });
       });
 
       req.on('error', () => resolve(null));
@@ -40,12 +111,72 @@ class ReadmeGuide {
     });
   }
 
+  parseRepoCoordinates(repoInput) {
+    let clean = (repoInput || '').trim();
+    if (!clean) return null;
+
+    if (fs.existsSync(clean)) {
+      return { isLocal: true, path: path.resolve(clean) };
+    }
+
+    let owner = null;
+    let repo = null;
+
+    const match = clean.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/i);
+    if (match) {
+      owner = match[1];
+      repo = match[2];
+    } else if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(clean)) {
+      const parts = clean.split('/');
+      owner = parts[0];
+      repo = parts[1];
+    }
+
+    if (owner && repo) {
+      return { isLocal: false, owner, repo, identifier: `${owner}-${repo}`.toLowerCase() };
+    }
+
+    return null;
+  }
+
+  /**
+   * Fetch any file from repository root using raw CDN (zero API rate limit)
+   */
+  async fetchRawFile(repoInput, filename) {
+    const coords = this.parseRepoCoordinates(repoInput);
+    if (!coords) return null;
+
+    if (coords.isLocal) {
+      const p = path.join(coords.path, filename);
+      if (fs.existsSync(p)) {
+        return fs.readFileSync(p, 'utf8');
+      }
+      return null;
+    }
+
+    const branches = ['HEAD', 'main', 'master'];
+    for (const b of branches) {
+      const url = `https://raw.githubusercontent.com/${coords.owner}/${coords.repo}/${b}/${filename}`;
+      const data = await this.fetchUrl(url);
+      if (data && !data.startsWith('404: Not Found')) {
+        return data;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Fetch README (local or remote raw CDN)
+   */
   async fetchReadme(repoInput) {
-    // 1. Local path
-    if (fs.existsSync(repoInput)) {
+    const coords = this.parseRepoCoordinates(repoInput);
+    if (!coords) return null;
+
+    if (coords.isLocal) {
       const candidates = ['README.md', 'readme.md', 'README', 'Readme.md'];
       for (const c of candidates) {
-        const p = path.join(repoInput, c);
+        const p = path.join(coords.path, c);
         if (fs.existsSync(p)) {
           return { source: 'local', content: fs.readFileSync(p, 'utf8') };
         }
@@ -53,63 +184,69 @@ class ReadmeGuide {
       return null;
     }
 
-    // 2. Remote GitHub repository
-    let owner = null;
-    let repo = null;
-
-    const match = repoInput.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/i);
-    if (match) {
-      owner = match[1];
-      repo = match[2];
-    } else if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repoInput.trim())) {
-      const parts = repoInput.trim().split('/');
-      owner = parts[0];
-      repo = parts[1];
-    }
-
-    if (!owner || !repo) return null;
-
     const branches = ['HEAD', 'main', 'master'];
     const filenames = ['README.md', 'readme.md', 'README'];
 
-    for (const branch of branches) {
+    for (const b of branches) {
       for (const fn of filenames) {
-        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${fn}`;
-        try {
-          const content = await this.fetchUrl(rawUrl);
-          if (content && !content.startsWith('404: Not Found')) {
-            return {
-              source: rawUrl,
-              owner,
-              repo,
-              content
-            };
-          }
-        } catch {}
+        const url = `https://raw.githubusercontent.com/${coords.owner}/${coords.repo}/${b}/${fn}`;
+        const content = await this.fetchUrl(url);
+        if (content && !content.startsWith('404: Not Found')) {
+          return {
+            source: url,
+            owner: coords.owner,
+            repo: coords.repo,
+            content
+          };
+        }
       }
     }
 
     return null;
   }
 
+  /**
+   * Extract targeted installation sections from README
+   * Fixes L75: avoids getting confused by 50-page complex READMEs
+   */
+  extractTargetedSections(readmeText) {
+    if (!readmeText) return '';
+
+    // Match sections with headers like: ## Installation, ## Quick Start, ## Getting Started, ## Setup, ## How to install
+    const sectionRegex = /(?:^|\n)#{1,3}\s*(?:install(?:ation)?|quick\s*start|getting\s*started|setup|how\s*to\s*use|usage)\b([\s\S]*?)(?=(?:\n#{1,3}\s+[^\n]+)|$)/gi;
+    let combined = '';
+    let match;
+    while ((match = sectionRegex.exec(readmeText)) !== null) {
+      combined += '\n' + match[1];
+    }
+
+    return combined.trim();
+  }
+
+  /**
+   * Parse install guide from README
+   */
   parseInstallGuide(readmeText, repoInput = '') {
     if (!readmeText) {
       return { hasGuide: false, suggestions: [], rawSection: '' };
     }
 
-    // Extract all code blocks
+    // First try targeted installation sections to avoid false positives in big READMEs
+    const targetedText = this.extractTargetedSections(readmeText);
+    const textToScan = targetedText.length > 50 ? targetedText : readmeText;
+
     const codeBlocks = [];
     const codeRegex = /```(?:bash|sh|shell|console|zsh|powershell)?\s*\n([\s\S]*?)\n```/gi;
     let match;
-    while ((match = codeRegex.exec(readmeText)) !== null) {
+    while ((match = codeRegex.exec(textToScan)) !== null) {
       codeBlocks.push(match[1].trim());
     }
 
     // Also check inline commands
     const inlineRegex = /`([^`\n]+)`/g;
-    while ((match = inlineRegex.exec(readmeText)) !== null) {
+    while ((match = inlineRegex.exec(textToScan)) !== null) {
       const cmd = match[1].trim();
-      if (cmd.startsWith('npx ') || cmd.startsWith('npm ') || cmd.startsWith('pip ') || cmd.startsWith('cargo ') || cmd.startsWith('curl ')) {
+      if (/^(?:npx|npm|pnpm|yarn|bun|pip|uv|pipx|cargo|brew|curl|docker)\s/i.test(cmd)) {
         codeBlocks.push(cmd);
       }
     }
@@ -132,7 +269,7 @@ class ReadmeGuide {
             description: 'Install skills directly via Skills CLI'
           });
         }
-        // Pattern B: npx universal/tool setup (e.g. npx ecc-universal setup)
+        // Pattern B: npx universal/tool setup
         else if (/^npx\s+[a-zA-Z0-9_@.-]+\s+(?:setup|install)\b/i.test(line)) {
           seen.add(line);
           suggestions.push({
@@ -162,14 +299,14 @@ class ReadmeGuide {
             description: 'Global package installation'
           });
         }
-        // Pattern E: Python package install
-        else if (/^(?:pip|uv\s+pip|pipx)\s+install\b/i.test(line)) {
+        // Pattern E: Isolated Python tool install (uv tool, pipx, pip)
+        else if (/^(?:uv\s+tool\s+install|pipx\s+install|pip\s+install)\b/i.test(line)) {
           seen.add(line);
           suggestions.push({
             type: 'pip',
             command: line,
             priority: 5,
-            description: 'Python package installation'
+            description: 'Python tool installation'
           });
         }
         // Pattern F: Cargo install
@@ -182,26 +319,225 @@ class ReadmeGuide {
             description: 'Rust cargo installation'
           });
         }
-        // Pattern G: Local script execution (e.g. ./install.sh)
+        // Pattern G: Docker run / compose
+        else if (/^docker(?:-compose|\s+compose)?\s+(?:run|up)\b/i.test(line)) {
+          seen.add(line);
+          suggestions.push({
+            type: 'docker',
+            command: line,
+            priority: 6,
+            description: 'Docker container startup'
+          });
+        }
+        // Pattern H: Local script execution (e.g. ./install.sh)
         else if (/^(?:bash\s+)?\.?\/?install\.sh\b/i.test(line)) {
           seen.add(line);
           suggestions.push({
             type: 'local_script',
             command: line,
-            priority: 6,
+            priority: 7,
             description: 'Execute repo install script'
           });
         }
       }
     }
 
-    // Sort by priority (skills_cli, npx_setup, curl_sh first)
     suggestions.sort((a, b) => a.priority - b.priority);
 
     return {
       hasGuide: suggestions.length > 0,
       suggestions,
       primarySuggestion: suggestions[0] || null
+    };
+  }
+
+  /**
+   * 7-Archetype Classifier (Zero-Clone Triage)
+   * Discovers what kind of repository this is BEFORE downloading.
+   */
+  async classifyArchetype(repoInput, options = {}) {
+    const coords = this.parseRepoCoordinates(repoInput);
+    const result = {
+      archetype: 'source-build',
+      requiresClone: true,
+      hasSkills: false,
+      hasReleases: false,
+      hasDocker: false,
+      binaries: [],
+      framework: null,
+      suggestedMethod: 'clone',
+      submodules: false
+    };
+
+    if (!coords) return result;
+
+    let pkgJson = null;
+    let cargoToml = null;
+    let pyproject = null;
+    let dockerfile = null;
+    let compose = null;
+    let gitmodules = null;
+    let skillMd = null;
+
+    if (coords.isLocal) {
+      // Local repository
+      const exists = (file) => fs.existsSync(path.join(coords.path, file));
+      const read = (file) => exists(file) ? fs.readFileSync(path.join(coords.path, file), 'utf8') : null;
+
+      pkgJson = read('package.json');
+      cargoToml = read('Cargo.toml');
+      pyproject = read('pyproject.toml') || read('requirements.txt');
+      dockerfile = read('Dockerfile');
+      compose = read('docker-compose.yml') || read('compose.yml');
+      gitmodules = read('.gitmodules');
+      skillMd = read('SKILL.md');
+
+      // Check skills directory
+      let localSkillCount = 0;
+      if (skillMd) localSkillCount++;
+      const skillsDir = path.join(coords.path, 'skills');
+      if (fs.existsSync(skillsDir)) {
+        try {
+          const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+          for (const e of entries) {
+            if (e.isDirectory() && fs.existsSync(path.join(skillsDir, e.name, 'SKILL.md'))) {
+              localSkillCount++;
+            }
+          }
+        } catch {}
+      }
+      if (localSkillCount > 0) {
+        result.hasSkills = true;
+        result.skillCount = localSkillCount;
+      }
+    } else {
+      // Remote raw probes without cloning
+      [pkgJson, cargoToml, pyproject, dockerfile, compose, gitmodules, skillMd] = await Promise.all([
+        this.fetchRawFile(repoInput, 'package.json'),
+        this.fetchRawFile(repoInput, 'Cargo.toml'),
+        this.fetchRawFile(repoInput, 'pyproject.toml'),
+        this.fetchRawFile(repoInput, 'Dockerfile'),
+        this.fetchRawFile(repoInput, 'docker-compose.yml'),
+        this.fetchRawFile(repoInput, 'gitmodules'),
+        this.fetchRawFile(repoInput, 'SKILL.md')
+      ]);
+
+      if (skillMd) {
+        result.hasSkills = true;
+        result.skillCount = 1;
+      }
+    }
+
+    if (dockerfile || compose) result.hasDocker = true;
+    if (gitmodules) result.submodules = true;
+
+    // Archetype 1: Prompt Skill Pack
+    if (result.hasSkills) {
+      result.archetype = 'skill-pack';
+      result.requiresClone = false;
+      result.suggestedMethod = 'stream-extract';
+      return result;
+    }
+
+    // Archetype 3: CLI Package Manager Tool
+    if (pkgJson) {
+      try {
+        const pkg = JSON.parse(pkgJson);
+        if (pkg.bin) {
+          result.archetype = 'pkg-tool';
+          result.requiresClone = false;
+          result.suggestedMethod = 'npm-install';
+          result.binaries = typeof pkg.bin === 'string'
+            ? [pkg.name || 'tool']
+            : Object.keys(pkg.bin);
+          return result;
+        }
+      } catch {}
+    }
+
+    if (cargoToml && (cargoToml.includes('[[bin]]') || cargoToml.includes('[package]'))) {
+      const match = cargoToml.match(/name\s*=\s*["']([^"']+)["']/);
+      if (match) {
+        result.binaries.push(match[1]);
+      }
+    }
+
+    if (pyproject && pyproject.includes('[project.scripts]')) {
+      result.archetype = 'pkg-tool';
+      result.requiresClone = false;
+      result.suggestedMethod = 'uv-tool';
+      return result;
+    }
+
+    // Archetype 4: Fullstack Web App / Service
+    if (dockerfile || compose) {
+      result.archetype = 'web-app';
+      result.requiresClone = false;
+      result.suggestedMethod = 'docker-or-api-skill';
+      return result;
+    }
+
+    // Check for web app without Docker
+    if (pkgJson) {
+      try {
+        const pkg = JSON.parse(pkgJson);
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+        if (deps.next || deps.react || deps.vue || deps.express || deps.fastify) {
+          result.archetype = 'web-app';
+          result.requiresClone = false;
+          result.suggestedMethod = 'service-skill';
+          return result;
+        }
+        // Archetype 6: Pure library
+        result.archetype = 'library';
+        result.requiresClone = false;
+        result.suggestedMethod = 'library-reference';
+        return result;
+      } catch {}
+    }
+
+    return result;
+  }
+
+  /**
+   * Human Handoff Report Generator (Fixes L75)
+   * Produces a clean, report-like guide when an app requires human interference.
+   */
+  generateHandoffReport(options = {}) {
+    const appName = options.repoName || 'Application';
+    const prereqs = options.prerequisites || [];
+    const completed = options.stepsCompleted || [];
+    const actionRequired = options.actionRequired || 'Manual configuration required.';
+
+    const lines = [
+      `========================================================================`,
+      `⚠️  HUMAN INTERVENTION REQUIRED FOR: ${appName.toUpperCase()}`,
+      `========================================================================`,
+      ``,
+      `The repository was analyzed and partially prepared for your AI agent.`,
+      `However, completing execution requires user action on your host machine.`,
+      ``,
+      `📋 WHAT THE SYSTEM COMPLETED AUTOMATICALLY:`,
+      ...completed.map(c => `   ✔ ${c}`),
+      ``,
+      `🛑 ACTION REQUIRED BY YOU:`,
+      `   👉 ${actionRequired}`,
+      ``,
+      `📌 PREREQUISITES CHECKLIST:`,
+      ...prereqs.map(p => `   [ ] ${p}`),
+      ``,
+      `🔄 HOW TO RESUME:`,
+      `   Once completed, tell your AI agent: "I have completed the prerequisites, continue."`,
+      `========================================================================`
+    ];
+
+    return {
+      requiresHumanAction: true,
+      appName,
+      prerequisites: prereqs,
+      stepsCompleted: completed,
+      actionRequired,
+      formattedReport: lines.join('\n')
     };
   }
 }
