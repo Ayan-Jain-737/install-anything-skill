@@ -107,7 +107,9 @@ class InstallAnythingCLI {
 
   saveInstalled(list) {
     try {
-      fs.writeFileSync(this.installedRegistry, JSON.stringify({ installations: list }, null, 2));
+      const tmpPath = `${this.installedRegistry}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+      fs.writeFileSync(tmpPath, JSON.stringify({ installations: list }, null, 2));
+      fs.renameSync(tmpPath, this.installedRegistry);
     } catch {}
   }
 
@@ -127,8 +129,9 @@ class InstallAnythingCLI {
     const parent = path.dirname(targetDir);
     if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
 
+    const recursiveFlag = (options.recursive || options.submodules) ? ' --recursive' : '';
     try {
-      execSync(`git clone --depth 1 "${norm.url}" "${targetDir}"`, {
+      execSync(`git clone --depth 1${recursiveFlag} "${norm.url}" "${targetDir}"`, {
         stdio: 'pipe',
         timeout: 300000
       });
@@ -328,18 +331,35 @@ class InstallAnythingCLI {
 
     // Fallback if no guide command executed (or local repo)
     if (!guideFollowed) {
+      // Triage repository archetype before cloning (L160: minimize clones as P0)
+      const triage = await this.readmeGuide.classifyArchetype(norm.url, options);
       if (!isJson) {
-        if (guide.hasGuide && guide.primarySuggestion) {
-          console.log(`   ℹ️ Guided setup requires interactive terminal; proceeding with direct repository skill installation...`);
-        } else {
-          console.log(`   ℹ️ No direct installer command in README; checking repository files...`);
-        }
+        console.log(`   🏷️  Archetype Detected: ${triage.archetype} (Strategy: ${triage.suggestedMethod})`);
       }
-      const cloned = this.ensureClone(norm, targetDir, options);
-      if (cloned && fs.existsSync(targetDir)) {
-        const diagnostics = this.scanner.scanRepo(targetDir);
-        this.executeRepoSuggestions(targetDir, diagnostics, options);
-        this.exposeBinaries(targetDir, diagnostics.suggestions?.binaries);
+
+      if (triage.archetype === 'web-app' && !options.forceClone && !options.force) {
+        if (!isJson) {
+          console.log(`   💡 Fullstack service detected. Synthesizing operational service manual without local cache bloat...`);
+        }
+        guideFollowed = true;
+        executedCommand = triage.hasDocker ? 'docker-service' : 'service-manual';
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+      } else {
+        if (!isJson) {
+          if (guide.hasGuide && guide.primarySuggestion) {
+            console.log(`   ℹ️ Guided setup requires interactive terminal; proceeding with direct repository skill installation...`);
+          } else {
+            console.log(`   ℹ️ No direct installer command in README; checking repository files...`);
+          }
+        }
+        const cloned = this.ensureClone(norm, targetDir, { ...options, submodules: triage.submodules });
+        if (cloned && fs.existsSync(targetDir)) {
+          const diagnostics = this.scanner.scanRepo(targetDir);
+          this.executeRepoSuggestions(targetDir, diagnostics, options);
+          this.exposeBinaries(targetDir, diagnostics.suggestions?.binaries);
+        }
       }
     }
 
@@ -382,8 +402,15 @@ class InstallAnythingCLI {
             registeredHarnesses: res.registeredHarnesses.map(h => h.harness)
           });
         }
-      } else if (!guideFollowed) {
-        const gen = this.skillRegistry.generateSkillForRepo(targetDir, { name: norm.repoName, repoUrl: norm.url });
+      } else {
+        const triage = await this.readmeGuide.classifyArchetype(norm.url, options);
+        const gen = this.skillRegistry.generateSkillForRepo(targetDir, {
+          name: norm.repoName,
+          repoUrl: norm.url,
+          archetype: triage.archetype,
+          hasDocker: triage.hasDocker,
+          binaries: triage.binaries
+        });
         const res = this.skillRegistry.registerSkill(gen, {
           repoUrl: norm.url,
           targetHarness: callerHarness,
@@ -601,6 +628,53 @@ class InstallAnythingCLI {
   }
 
   /**
+   * Inspect repository archetype, skill availability, and installation plan without modifying system (L75)
+   */
+  async inspect(repoInput, options = {}) {
+    const isJson = options.json;
+    const norm = this.normalizeRepoUrl(repoInput);
+
+    const triage = await this.readmeGuide.classifyArchetype(norm.url, options);
+    const readmeData = await this.readmeGuide.fetchReadme(norm.url);
+    const guide = readmeData
+      ? this.readmeGuide.parseInstallGuide(readmeData.content, norm.url)
+      : { hasGuide: false, suggestions: [] };
+
+    const report = {
+      repository: norm.url,
+      identifier: norm.identifier,
+      archetype: triage.archetype,
+      requiresClone: triage.requiresClone,
+      suggestedMethod: triage.suggestedMethod,
+      binaries: triage.binaries,
+      hasDocker: triage.hasDocker,
+      hasSkills: triage.hasSkills,
+      recommendedCommand: guide.primarySuggestion?.command || null
+    };
+
+    if (isJson) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`\n🔍 Inspection Report: ${norm.url}`);
+      console.log(`   • Archetype: ${report.archetype}`);
+      console.log(`   • Requires Git Clone: ${report.requiresClone ? 'Yes' : 'No (Zero-Clone)'}`);
+      console.log(`   • Installation Strategy: ${report.suggestedMethod}`);
+      if (report.binaries && report.binaries.length > 0) {
+        console.log(`   • Exposed Binaries: ${report.binaries.join(', ')}`);
+      }
+      if (report.hasDocker) {
+        console.log(`   • Docker / Container Support: Yes`);
+      }
+      if (report.recommendedCommand) {
+        console.log(`   • Recommended Guide Command: ${report.recommendedCommand}`);
+      }
+      console.log('');
+    }
+
+    return report;
+  }
+
+  /**
    * Search for skills, packages, and tool repositories across registry and curated index
    */
   async findSkills(query, options = {}) {
@@ -652,6 +726,7 @@ ias (Install Anything Skill) v${cli.version} - Universal AI Agent Repository & S
 
 USAGE:
     ias find <query> [--json]
+    ias inspect <repo-url> [--json]
     ias install <repo-url> [--agent <name>] [--all-agents] [--dry-run] [--force] [--json]
     ias diagnose <repo-url> [--json]
     ias list-installed [--json]
@@ -661,6 +736,7 @@ USAGE:
 
 COMMANDS:
     find <query>        Discover agent skills, packages, and CLI tool repos (e.g. ias find react)
+    inspect <url>       Preview repository archetype, skills, and install plan without modifying disk.
     install <url>       Check README for install guide, execute suggested steps,
                         and register skills for the active agent harness and global store.
     diagnose <url>      Check README & repository without installing.
@@ -713,6 +789,14 @@ WORKFLOW:
           process.exit(1);
         }
         await cli.diagnose(target, { json: isJson });
+        break;
+
+      case 'inspect':
+        if (!target) {
+          console.error('Error: repository URL required');
+          process.exit(1);
+        }
+        await cli.inspect(target, { json: isJson });
         break;
 
       case 'list':
