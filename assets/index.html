@@ -163,6 +163,46 @@
   margin-inline: auto;
 }
 
+.release-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 4px var(--space-sm);
+  margin-bottom: var(--space-md);
+  background-color: var(--color-paper-2);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  box-shadow: 0 2px 10px rgba(0, 102, 255, 0.08);
+}
+
+.release-pill {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-accent-ink);
+  background-color: var(--color-accent);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+}
+
+.release-text {
+  color: var(--color-ink-2);
+  font-weight: 500;
+}
+
+.release-link {
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--dur-short) var(--ease-out);
+}
+
+.release-link:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+
 .hero-title {
   font-size: var(--text-display);
   letter-spacing: -0.03em;
@@ -969,7 +1009,7 @@
       <a href="#" class="brand-wrap">
         <span class="logo-badge">ias</span>
         <span class="brand-text">install-anything</span>
-        <span class="brand-tag">v2.0.1</span>
+        <span class="brand-tag">v3.1.0</span>
       </a>
 
       <nav class="nav-links">
@@ -982,7 +1022,7 @@
 
       <div class="nav-actions">
         <a href="https://www.npmjs.com/package/install-anything-skill" target="_blank" rel="noopener" class="badge-pill" title="View on npm">
-          <span>npm v2.0.1</span>
+          <span>npm v3.1.0</span>
         </a>
         <a href="https://github.com/Ayan-Jain-737/install-anything-skill" target="_blank" rel="noopener" class="btn-github">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -995,12 +1035,18 @@
   <!-- Hero Section -->
   <section class="hero">
     <div class="container hero-content">
+      <div class="release-banner">
+        <span class="release-pill">v3.1 Released</span>
+        <span class="release-text">Zero-Clone Architecture, eget-Style Binaries &amp; 7-Archetype Triage</span>
+        <a href="https://github.com/Ayan-Jain-737/install-anything-skill/releases/tag/v3.1.0" target="_blank" rel="noopener" class="release-link">Changelog &rarr;</a>
+      </div>
+
       <h1 class="hero-title">
         Turn any GitHub repo into an active skill for AI coding agents.
       </h1>
 
       <p class="hero-lead">
-        <strong>ias</strong> (<code>install-anything-skill</code>) auto-synthesizes skill wrappers, compiles native binaries, and scopes tools cleanly to your caller with zero ghost folder pollution.
+        <strong>ias</strong> (<code>install-anything-skill</code>) auto-synthesizes deep skill manuals, streams zero-clone packages, downloads binary releases, and scopes tools cleanly to your caller with zero ghost folder pollution.
       </p>
 
       <!-- Primary Action CTA & 1-Command Install Switcher -->
@@ -1034,7 +1080,7 @@
       <!-- Quick Links -->
       <div class="re-route-links">
         <a href="https://www.npmjs.com/package/install-anything-skill" target="_blank" rel="noopener">
-          <span>npm package v2.0.1</span>
+          <span>npm package v3.1.0</span>
         </a>
         <a href="https://github.com/Ayan-Jain-737/install-anything-skill/discussions" target="_blank" rel="noopener">
           <span>GitHub Discussions</span>
@@ -1072,9 +1118,10 @@
         <div class="workbench-toolbar">
           <div class="preset-pills">
             <span class="preset-label">Presets:</span>
+            <button class="preset-btn" onclick="runPreset('inspect anil-matcha/open-generative-ai')">ias inspect web-app</button>
+            <button class="preset-btn" onclick="runPreset('install BurntSushi/ripgrep')">ias install binary</button>
             <button class="preset-btn" onclick="runPreset('find react')">ias find react</button>
-            <button class="preset-btn" onclick="runPreset('install BurntSushi/ripgrep')">ias install BurntSushi/ripgrep</button>
-            <button class="preset-btn" onclick="runPreset('diagnose astral-sh/ruff')">ias diagnose astral-sh/ruff</button>
+            <button class="preset-btn" onclick="runPreset('update')">ias update</button>
             <button class="preset-btn" onclick="runPreset('list-installed')">ias list-installed</button>
             <button class="preset-btn" onclick="runPreset('--help')">ias --help</button>
           </div>
@@ -1089,7 +1136,7 @@
         <!-- Interactive Terminal Prompt Input -->
         <div class="terminal-input-bar">
           <span class="prompt-label" id="termPromptLabel">agent@claude:~$</span>
-          <input type="text" class="term-input" id="termInput" placeholder="Try 'ias find react', 'ias install owner/repo', or 'ias --help'..." autocomplete="off" spellcheck="false">
+          <input type="text" class="term-input" id="termInput" placeholder="Try 'ias inspect anil-matcha/open-generative-ai', 'ias install BurntSushi/ripgrep', or 'ias update'..." autocomplete="off" spellcheck="false">
           <button class="btn-run" onclick="submitTerminalInput()">Run</button>
         </div>
       </div>
@@ -1101,33 +1148,48 @@
     <div class="container">
       <div class="section-head">
         <h2 class="section-title">How It Works</h2>
-        <p class="section-subtitle">A universal pipeline designed to turn arbitrary repositories into production-grade agent skills without manual wrapper authoring.</p>
+        <p class="section-subtitle">An autonomous, zero-clone pipeline designed to turn arbitrary repositories into production-grade agent skills without manual wrapper authoring or repository bloat.</p>
       </div>
 
       <div class="pillars-grid">
         <div class="pillar-item">
-          <span class="pillar-num">01 / Detection</span>
-          <h3 class="pillar-heading">README-First Intelligence</h3>
-          <p class="pillar-text">Scans repository documentation and manifests to detect preferred installation methods (Cargo, Go, Pip, NPM) and intended CLI flags before running.</p>
+          <span class="pillar-num">01 / Triage</span>
+          <h3 class="pillar-heading">7-Archetype Triage</h3>
+          <p class="pillar-text">Pre-inspects raw CDN manifests to classify repos into CLI tools, prompt skills, web apps, or libraries before touching disk.</p>
         </div>
 
         <div class="pillar-item">
-          <span class="pillar-num">02 / Build</span>
-          <h3 class="pillar-heading">Native Compilation</h3>
-          <p class="pillar-text">Automatically builds binaries for Rust, Go, Python, and Node projects in isolated workspaces, avoiding global pollution.</p>
+          <span class="pillar-num">02 / Zero-Clone</span>
+          <h3 class="pillar-heading">Tarball Streaming</h3>
+          <p class="pillar-text">Streams GitHub archive tarballs in memory to extract targeted skills without cloning gigabytes of git history or dead files.</p>
         </div>
 
         <div class="pillar-item">
-          <span class="pillar-num">03 / Scoping</span>
-          <h3 class="pillar-heading">Active-Agent Isolation</h3>
-          <p class="pillar-text">Detects your caller runtime (Claude, Cursor, Codex, Gemini, Hermes) and targets its specific skills folder. Never touches inactive harnesses.</p>
+          <span class="pillar-num">03 / Binaries</span>
+          <h3 class="pillar-heading">eget-Style Downloads</h3>
+          <p class="pillar-text">Automatically matches OS, architecture, and libc to download pre-compiled release binaries straight into <code>~/.local/bin/</code>.</p>
         </div>
 
         <div class="pillar-item">
-          <span class="pillar-num">04 / Exposure</span>
-          <h3 class="pillar-heading">PATH Symlinking</h3>
-          <p class="pillar-text">Symlinks built executables directly into <code>~/.local/bin</code> so newly installed tools are immediately available in shell sessions.</p>
+          <span class="pillar-num">04 / Synthesis</span>
+          <h3 class="pillar-heading">Operational Manuals</h3>
+          <p class="pillar-text">Auto-synthesizes deep, multi-section <code>SKILL.md</code> manuals with CLI flags, usage recipes, and environment troubleshooting.</p>
         </div>
+
+        <div class="pillar-item">
+          <span class="pillar-num">05 / Scoping</span>
+          <h3 class="pillar-heading">Active &amp; Local Scoping</h3>
+          <p class="pillar-text">Scopes skills strictly to your caller runtime or project workspace (<code>--scope local</code>) with atomic directory spinlocks.</p>
+        </div>
+
+        <div class="pillar-item">
+          <span class="pillar-num">06 / Updates</span>
+          <h3 class="pillar-heading">1-Command Self-Update</h3>
+          <p class="pillar-text">Run <code>ias update</code> to upgrade the CLI and re-sync all harness skills with 24-hr non-blocking update notifications.</p>
+        </div>
+      </div>
+    </div>
+  </section>
       </div>
     </div>
   </section>
@@ -1213,7 +1275,7 @@
           <h5>Quick Links</h5>
           <div class="footer-links">
             <a href="https://github.com/Ayan-Jain-737/install-anything-skill" target="_blank" rel="noopener">GitHub Repository</a>
-            <a href="https://www.npmjs.com/package/install-anything-skill" target="_blank" rel="noopener">NPM Registry (v2.0.1)</a>
+            <a href="https://www.npmjs.com/package/install-anything-skill" target="_blank" rel="noopener">NPM Registry (v3.1.0)</a>
             <a href="https://github.com/Ayan-Jain-737/install-anything-skill/releases" target="_blank" rel="noopener">Releases &amp; Changelog</a>
             <a href="https://raw.githubusercontent.com/Ayan-Jain-737/install-anything-skill/main/scripts/install.sh" target="_blank" rel="noopener">Curl Installer Script</a>
           </div>
@@ -1260,6 +1322,22 @@
 
     const CATALOG_DATA = [
       {
+        id: 'open-generative-ai',
+        name: 'open-generative-ai',
+        category: 'Web App',
+        source: 'anil-matcha/open-generative-ai',
+        installs: '42k',
+        desc: 'Open-source generative AI platform. Auto-synthesizes operational service manual with Docker run recipes (Zero app bloat).'
+      },
+      {
+        id: 'ripgrep',
+        name: 'ripgrep (rg)',
+        category: 'CLI Tool',
+        source: 'BurntSushi/ripgrep',
+        installs: '3.1M',
+        desc: 'Fast line-oriented search tool. Downloads pre-compiled release binary directly to ~/.local/bin/rg (Zero git clone).'
+      },
+      {
         id: 'react-best-practices',
         name: 'react-best-practices',
         category: 'Frontend',
@@ -1282,14 +1360,6 @@
         source: 'astral-sh/ruff',
         installs: '2.4M',
         desc: 'Fast Python linter and code formatter written in Rust. Auto-synthesizes skill wrapper.'
-      },
-      {
-        id: 'ripgrep',
-        name: 'ripgrep (rg)',
-        category: 'CLI Tool',
-        source: 'BurntSushi/ripgrep',
-        installs: '3.1M',
-        desc: 'Fast line-oriented search tool. Compiles native binary and symlinks to ~/.local/bin/rg.'
       },
       {
         id: 'ponytail',
@@ -1435,17 +1505,51 @@
 
       if (action === '--help' || action === 'help' || action === '-h' || !action) {
         lines.push(
-          `<span class="term-white">ias (Install Anything Skill) v2.0.1</span> &mdash; Universal AI Agent Package Manager`,
+          `<span class="term-white">ias (Install Anything Skill) v3.1.0</span> &mdash; Universal AI Agent Package Manager`,
           `<span class="term-dim">USAGE:</span> ias &lt;command&gt; [options]`,
           ``,
           `<span class="term-sky">COMMANDS:</span>`,
           `  <span class="term-gold">find &lt;query&gt;</span>        Discover skills across open registry &amp; CLI repos`,
-          `  <span class="term-gold">install &lt;url&gt;</span>       Scan README, build binaries, register for active agent`,
-          `  <span class="term-gold">diagnose &lt;url&gt;</span>      Inspect repo without installing (language/framework)`,
-          `  <span class="term-gold">list-installed</span>       Show all registered skills and binaries`,
-          `  <span class="term-gold">uninstall &lt;id&gt;</span>      Safely remove skills and symlinks`,
+          `  <span class="term-gold">inspect &lt;url&gt;</span>     Preview archetype &amp; install plan without downloading`,
+          `  <span class="term-gold">install &lt;url&gt;</span>     Zero-clone install repository and register skills`,
+          `  <span class="term-gold">diagnose &lt;url&gt;</span>    Analyze repository without installing`,
+          `  <span class="term-gold">list-installed</span>     Show all registered skills and binaries`,
+          `  <span class="term-gold">update</span>             Update ias and sync skills across all harnesses`,
+          `  <span class="term-gold">uninstall &lt;id&gt;</span>    Safely remove skills and symlinks`,
+          ``,
+          `<span class="term-dim">OPTIONS:</span>`,
+          `  <span class="term-gold">-p, --scope local</span>   Install into current workspace (./.agents/skills/)`,
+          `  <span class="term-gold">--skills &lt;glob&gt;</span>     Filter extracted skills with wildcards (e.g. "react-*")`,
+          `  <span class="term-gold">--json</span>              Output machine-readable JSON for agent consumption`,
           ``,
           `<span class="term-dim">Active Harness: ${activeHarness} (${HARNESS_PATHS[activeHarness]})</span>`
+        );
+      } else if (action === 'inspect') {
+        const cleanTarget = target.replace(/^https?:\/\/github\.com\//, '');
+        const isApp = cleanTarget.includes('open-generative-ai') || cleanTarget.includes('next') || cleanTarget.includes('web');
+        const isBin = cleanTarget.includes('ripgrep') || cleanTarget.includes('ruff') || cleanTarget.includes('rg');
+        const archetype = isBin ? 'cli-binary' : isApp ? 'web-app' : 'skill-pack';
+
+        lines.push(
+          `<span class="term-gold">[inspect] Rate-limit-immune manifest triage:</span> <span class="term-white">${cleanTarget || 'repo'}</span>`,
+          `<span class="term-dim">Step 1: Manifest inspection via raw CDN (bypasses 60 req/hr limits)...</span>`,
+          `<span class="term-green">[ok] Classified archetype: <strong class="term-sky">${archetype}</strong></span>`,
+          `<span class="term-dim">Installation strategy:</span>`,
+          isBin ? `  &bull; Deterministic eget-style release asset download to ~/.local/bin/ (Zero git clone)` :
+          isApp ? `  &bull; Operational service manual synthesis with Docker run recipes (Zero app bloat)` :
+                  `  &bull; Zero-clone tarball streaming (/archive/HEAD.tar.gz) for skill prompt extraction`,
+          `<span class="term-sub term-green">&rarr; Ready to install. Run "ias install ${cleanTarget}" to proceed.</span>`
+        );
+      } else if (action === 'update' || action === 'upgrade') {
+        lines.push(
+          `<span class="term-gold">[update] Checking registry.npmjs.org for updates...</span>`,
+          `<span class="term-dim">Current version: v3.1.0</span>`,
+          `<span class="term-green">✔ install-anything-skill is already at the latest release!</span>`,
+          `<span class="term-dim">Synchronizing registered skills across all harnesses...</span>`,
+          `<span class="term-sub term-sky">&bull; Claude Code (~/.claude/skills/ias) [Synced]</span>`,
+          `<span class="term-sub term-sky">&bull; Gemini / Antigravity (~/.gemini/skills/ias) [Synced]</span>`,
+          `<span class="term-sub term-sky">&bull; Open Agents (~/.agents/skills/ias) [Synced]</span>`,
+          `<span class="term-white">All agent skills updated and operational.</span>`
         );
       } else if (action === 'find' || action === 'search') {
         const q = target.toLowerCase();
@@ -1487,11 +1591,16 @@
           const id = cleanName.split('/')[1] || cleanName;
           installedItems.add(id.toLowerCase());
 
+          const isBin = cleanName.includes('ripgrep') || cleanName.includes('ruff');
+          const isApp = cleanName.includes('open-generative-ai');
+
           lines.push(
             `<span class="term-sky">Target repository:</span> <span class="term-white">${cleanName}</span>`,
-            `<span class="term-dim">Step 1: Checking README for official install guide...</span>`,
-            `<span class="term-green">[ok] README found. Preferred method: auto-detected</span>`,
-            `<span class="term-dim">Step 2: Running build &amp; dependency steps...</span>`,
+            `<span class="term-dim">Step 1: Manifest triage &amp; archetype classification...</span>`,
+            isBin ? `<span class="term-green">[ok] Archetype: cli-binary (Zero-Clone release download)</span>` :
+            isApp ? `<span class="term-green">[ok] Archetype: web-app (Service manual synthesis)</span>` :
+                    `<span class="term-green">[ok] Archetype: skill-pack (Tarball streaming extraction)</span>`,
+            `<span class="term-dim">Step 2: ${isBin ? 'Downloading matched release asset to ~/.local/bin/rg' : isApp ? 'Synthesizing operational Docker service manual' : 'Extracting discovered skills without full git clone...'}</span>`,
             `<span class="term-gold">Active agent detected:</span> <span class="term-white">${activeHarness.toUpperCase()}</span>`,
             `<span class="term-green">[ok] Registered skills to ${HARNESS_PATHS[activeHarness]}ias</span>`,
             `<span class="term-green">[ok] Synced canonical storage: ~/.agents/skills/ &amp; .skill-lock.json</span>`,
@@ -1515,11 +1624,11 @@
         );
         if (installedItems.size === 0) {
           lines.push(
-            `<span class="term-sky">&bull; install-anything-skill</span> <span class="term-dim">(v2.0.1 core CLI)</span>`,
+            `<span class="term-sky">&bull; install-anything-skill</span> <span class="term-dim">(v3.1.0 core CLI)</span>`,
             `<span class="term-sub">Location: ${HARNESS_PATHS[activeHarness]}ias</span>`,
             `<span class="term-sub">Binaries: ~/.local/bin/ias, ~/.local/bin/install-anything</span>`,
             ``,
-            `<span class="term-dim">No third-party repositories installed yet. Try "ias find react" or "ias install BurntSushi/ripgrep".</span>`
+            `<span class="term-dim">No third-party repositories installed yet. Try "ias find react", "ias inspect anil-matcha/open-generative-ai", or "ias install BurntSushi/ripgrep".</span>`
           );
         } else {
           installedItems.forEach(item => {
@@ -1622,8 +1731,8 @@
     window.addEventListener('DOMContentLoaded', () => {
       renderCatalog(CATALOG_DATA);
       appendTermOutput([
-        `<span class="term-white">ias (Install Anything Skill) v2.0.1</span> &mdash; Interactive AI Agent Workbench`,
-        `<span class="term-dim">Active Agent: <strong class="term-sky">Claude Code</strong> (~/.claude/skills/ias) &bull; Zero ghost folder mode active</span>`,
+        `<span class="term-white">ias (Install Anything Skill) v3.1.0</span> &mdash; Interactive AI Agent Workbench`,
+        `<span class="term-dim">Active Agent: <strong class="term-sky">Claude Code</strong> (~/.claude/skills/ias) &bull; Zero-Clone &amp; 7-Archetype Mode Active</span>`,
         `<span class="term-dim">Type a command or click a preset above to explore.</span>`,
         ``
       ]);

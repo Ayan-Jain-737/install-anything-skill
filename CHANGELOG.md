@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-11-17
+
+### Added
+- ⚡ **Zero-Clone Architecture & Tarball Streaming**:
+  - Direct repository tarball streaming via GitHub archive URLs (`/archive/HEAD.tar.gz`) without cloning gigabytes of git history.
+  - Selective extraction of discovered `SKILL.md` files while ignoring non-skill bloat.
+  - Granular glob filtering support (`--skills "react-*,tdd*"`) to install only targeted skills from large prompt pack monorepos.
+- 🎯 **7-Archetype Intelligent Triage Engine (`ias inspect`)**:
+  - Classifies repositories before touching disk into 7 distinct archetypes: `skill-pack`, `cli-binary`, `cli-source`, `web-app`, `mcp-server`, `library`, and `mixed-meta`.
+  - Rate-limit-immune manifest extraction via `raw.githubusercontent.com` CDN with 24-hr local HTTP caching.
+  - Added `ias inspect <url> [--json]` command to preview archetype, suggested build command, and skill manifests.
+- 📦 **Deterministic `eget`-Style Binary Downloader**:
+  - Direct binary release asset matching using OS, Architecture (`x86_64`, `arm64`), and libc (`musl`, `gnu`) heuristics.
+  - Automatically matches and extracts `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.zip`, and Linux `.AppImage` release assets.
+  - Downloads binaries straight to `~/.local/bin/` with zero git cloning.
+- 📘 **Exhaustive Multi-Section Operational Manual Synthesis**:
+  - Deep auto-synthesis of `SKILL.md` for repositories lacking pre-packaged agent skills.
+  - Inspects real binary `--help` and CLI flags to generate structured recipes: Quick Commands, Common Flags, Environment Variables, and Troubleshooting.
+  - Special service manual generator for fullstack web applications (e.g. `open-generative-ai`) providing Docker startup recipes and API interaction guides without cloning bloated frontend bundles.
+- 🤝 **Interactive Human Handoff Reports**:
+  - Generates clear, structured markdown reports whenever non-AI applications require human secrets, external database initialization, or manual port configuration.
+- 🔒 **Project-Local Scoping (`--scope local` / `-p`)**:
+  - Support for local workspace skill registration (`./.agents/skills/`, `./.gemini/skills/`, `./.claude/skills/`).
+  - Atomic workspace-isolated lockfile (`./.skill-lock.json`).
+- 🔄 **Built-In Self-Updater (`ias update`) & 24-Hour Update Checker**:
+  - `ias update` command updates global npm package with automatic fallback to curl installer and re-synchronizes all agent skills.
+  - Non-blocking, cached 24-hour update notifier alerts users when newer versions are available on the npm registry.
+- 🛡️ **Atomic Directory Spinlocks & Security Hardening**:
+  - Directory-based lockfiles (`.lock`) with exponential backoff and stale lock auto-eviction prevent parallel agent race conditions.
+  - ZipSlip/TarSlip path traversal validation ensures files are strictly unpacked within destination root.
+  - Token isolation and safe child process execution.
+
+---
+
 ## [2.0.0] - 2026-11-05
 
 ### Changed

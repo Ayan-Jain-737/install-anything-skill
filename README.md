@@ -21,6 +21,17 @@ npm i -g install-anything-skill
 
 </div>
 
+> [!TIP]
+> **🚀 What's New in v3.1.0**:
+> - **Zero-Clone Architecture**: Streams tarballs (`/archive/HEAD.tar.gz`) directly to extract prompt skills without full git history cloning.
+> - **Deterministic Binary Releases**: Downloads release binaries straight to `~/.local/bin/` with `eget`-style OS/Arch heuristics (`ias install BurntSushi/ripgrep`).
+> - **7-Archetype Intelligent Triage (`ias inspect`)**: Pre-inspects repositories via raw CDN manifests to pick the ideal install path.
+> - **Comprehensive `SKILL.md` Synthesis**: Generates in-depth operational manuals from real CLI `--help` flags.
+> - **Fullstack Web-App Service Manuals**: Synthesizes Docker run and API instructions without downloading bloated frontend bundles (`ias install anil-matcha/open-generative-ai`).
+> - **Interactive Human Handoff**: Produces markdown guides when complex non-AI apps require human configuration.
+> - **Project-Local Scoping (`--scope local` / `-p`)**: Registers skills to `./.agents/skills/` without touching home directories.
+> - **Built-in Self-Updater (`ias update`)**: 1-command upgrade with non-blocking 24-hr update notifications.
+
 > [!NOTE]
 > **Package Renamed & Migration**: This package was formerly published as `enlighten-agent-tool`. It has been renamed and upgraded to **`install-anything-skill`**, callable everywhere via the short acronym **`ias`** (and `install-anything`). The previous package `enlighten-agent-tool` is deprecated.
 
@@ -160,43 +171,46 @@ ias install <repo-url>
 
 ---
 
-## 🧠 How Auto-Registration & Active Scoping Works
+## 🧠 How Intelligent Archetype Triage & Zero-Clone Scoping Works (v3.1)
 
-When an agent or developer runs `install-anything install <repo-url>`:
+When an agent or developer runs `ias install <repo-url>`:
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ 1. Clone / Fetch Repository                            │
-│    Cloned into ~/.install-anything/repos/<owner>/<repo>│
+│ 1. Rate-Limit-Immune Manifest Triage (ias inspect)     │
+│    Inspects raw CDN manifests, releases & README       │
 └──────────────────────────┬─────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────┐
-│ 2. Deep Skill Discovery                                │
-│    Finds SKILL.md at root, in skills/*, .agents/*      │
+│ 2. 7-Archetype Classification                          │
+│    Classifies into skill-pack, cli-binary, web-app,    │
+│    cli-source, mcp-server, library, or mixed-meta      │
 └──────────────────────────┬─────────────────────────────┘
                            │
-             Skills found? │
-            ┌──────────────┴──────────────┐
-       YES  │                             │ NO
-┌───────────▼──────────────────┐  ┌───────▼──────────────────────┐
-│ Register Discovered Skills   │  │ Auto-Synthesize Skill        │
-│ Link into ~/.agents/skills/  │  │ Generate SKILL.md wrapper for│
-│ & active agent directory     │  │ the newly installed tool     │
-└───────────┬──────────────────┘  └───────┬──────────────────────┘
-            └──────────────┬──────────────┘
+             Which Archetype?
+            ┌──────────────┼─────────────────────────────┐
+            │              │                             │
+    [skill-pack]     [cli-binary]                   [web-app]
+┌───────────▼─────┐┌───────▼────────────────────┐┌───────▼──────────────────────┐
+│ Zero-Clone Tar  ││ Deterministic eget Matcher ││ Operational Service Manual   │
+│ Stream archive  ││ Downloads binary release   ││ Generates Docker run & API   │
+│ & extract skills││ directly to ~/.local/bin/  ││ recipes without app bloat    │
+└───────────┬─────┘└───────┬────────────────────┘└───────┬──────────────────────┘
+            │              │                             │
+            └──────────────┼─────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────┐
-│ 3. Execute "Whatever That Repo Suggests"                │
-│    Runs npm install, pip install, cargo build, etc.    │
-│    Symlinks executables to ~/.local/bin/               │
+│ 3. Deep Skill Synthesis (If no SKILL.md found)         │
+│    Extracts real --help flags, subcommands & recipes   │
+│    into an exhaustive, actionable operational manual   │
 └──────────────────────────┬─────────────────────────────┘
                            │
 ┌──────────────────────────▼─────────────────────────────┐
-│ 4. Active-Agent Scoped Registration                    │
-│    • Auto-detects caller (Claude, Cursor, Codex, AGY)  │
-│    • Registers to active agent folder + global store   │
+│ 4. Scoped Registration & Atomic Locking                │
+│    • Active Agent: Claude, Gemini, Cursor, Hermes      │
+│    • Project-Local: ./.agents/skills/ (--scope local)  │
 │    • Zero ghost directories in unused agent folders    │
-│    • Updates ~/.agents/.skill-lock.json                │
+│    • Atomic directory spinlocks (.lock) prevent races  │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -207,10 +221,14 @@ When an agent or developer runs `install-anything install <repo-url>`:
 | Command | Description |
 |---------|-------------|
 | `ias find <query>` | Discover agent skills, packages, and CLI tool repos (e.g., `ias find react`) |
-| `ias install <url>` | Clone repo, compile binaries, register skills for active agent & global store |
+| `ias inspect <url>` | Preview repository archetype, detected skills, and install plan without modifying disk |
+| `ias install <url>` | Zero-clone install repository, compile binaries, and register skills |
+| `ias install <url> -p` | Install in **project-local** scope (`./.agents/skills/`) instead of user home |
+| `ias install <url> --skills "glob*"` | Filter and install only specific matching skills (e.g. `--skills "react-*"`) |
 | `ias install <url> --agent <name>` | Explicitly target an agent harness (e.g. `claude`, `cursor`, `gemini`, `hermes`) |
 | `ias diagnose <url>` | Analyze repository without installing (README guide, languages, frameworks, skills) |
 | `ias list-installed` | Show all managed installations, exposed binaries, and registered skills |
+| `ias update` | Self-update `ias` to latest npm release and sync all registered skills |
 | `ias uninstall <id> --force` | Safe removal of repository, binaries (`~/.local/bin`), and registered skills |
 | `ias --help` | Show command line help and options (alias: `install-anything`) |
 
@@ -224,6 +242,7 @@ When an agent or developer runs `install-anything install <repo-url>`:
 |-----------------|------------------|--------------------------------|
 | **Claude Code** | `~/.claude/skills/ias` | Skills directory & `~/.claude/commands/ias.md` (`/ias`) |
 | **Open Agents** | `~/.agents/skills/ias` & `.skill-lock.json` | Canonical global store (`npx skills` compatible) |
+| **Project-Local** | `./.agents/skills/` & `./.skill-lock.json` | Project-local workspace isolation (`--scope local` / `-p`) |
 | **Cursor** | `~/.cursor/skills/` | Automatic runtime detection & targeted on demand (`--agent cursor`) |
 | **Codex** | `~/.codex/skills/` | Automatic runtime detection & targeted on demand (`--agent codex`) |
 | **Hermes** | `~/.hermes/skills/ias` | Skills directory & `~/.hermes/commands/ias.md` (`/ias`) |
@@ -239,7 +258,7 @@ When an agent or developer runs `install-anything install <repo-url>`:
 ```
 install-anything-skill/
 ├── bin/
-│   ├── ias                          # Short acronym executable
+│   ├── ias                          # Short acronym executable with 24h update checker
 │   └── install-anything             # Full CLI executable
 ├── skills/
 │   ├── ias/                         # Primary acronym agent skill
@@ -248,14 +267,14 @@ install-anything-skill/
 │   ├── install-anything/            # Full-name agent skill definition
 │   │   ├── SKILL.md
 │   │   └── scripts/dispatch.js
-│   ├── install-anything-installer/  # Scanner, adapter, finder & skill registry engine
+│   ├── install-anything-installer/  # Scanner, adapter, triage & skill registry engine
 │   │   ├── SKILL.md
 │   │   └── scripts/
 │   │       ├── scan-repo.js         # Deep repo & skill scanner
 │   │       ├── skill-finder.js      # Skill & CLI tool discovery engine
-│   │       ├── skill-registry.js    # Multi-harness active-scoped registration manager
-│   │       ├── adapt-install.js     # OS & harness command adapter
-│   │       └── readme-guide.js      # README-first instruction parser
+│   │       ├── skill-registry.js    # Multi-harness active-scoped registration & synthesis manager
+│   │       ├── adapt-install.js     # Zero-clone tarball stream & binary downloader adapter
+│   │       └── readme-guide.js      # Rate-limit-safe 7-archetype triage engine & human handoff reporter
 │   └── install-anything-uninstaller/# Safe removal skill
 │       └── SKILL.md
 ├── commands/
@@ -266,6 +285,13 @@ install-anything-skill/
 │   ├── install.js                   # Node.js self-registration script
 │   └── postinstall.js               # NPM postinstall hook
 ├── tests/
+│   ├── test-concurrency.js          # Concurrency stress tests with directory spinlocks
+│   ├── test-triage.js               # 7-archetype classification & CDN caching tests
+│   ├── test-releases.js             # eget-style release asset matcher tests
+│   ├── test-synthesis.js            # In-depth operational manual synthesis tests
+│   ├── test-zero-clone.js           # Tarball streaming and binary download tests
+│   ├── test-security-audit.js       # ZipSlip, path traversal & token isolation tests
+│   ├── test-e2e-matrix.js           # Multi-harness E2E matrix verification tests
 │   ├── test-scanner.js              # Scanner unit tests
 │   ├── test-skills.js               # Multi-harness skill registration tests
 │   ├── test-finder.js               # SkillFinder & discovery engine tests
@@ -278,16 +304,19 @@ install-anything-skill/
 
 ## 🧪 Testing
 
-Run the full test suite with:
+Run the full 11-suite test suite with:
 
 ```bash
 npm test
 ```
 
 Includes:
-- Scanner tests for language, framework, dependencies, and skills.
-- Skill discovery and multi-harness global registration tests.
-- Full CLI lifecycle tests (`diagnose` -> `install` -> `list-installed` -> `uninstall`).
+- **Concurrency & Spinlocks**: 5 parallel worker processes testing simultaneous lock acquisition with zero file corruption.
+- **Triage & CDN Caching**: Validates archetype classification across CLI tools, prompt packs, fullstack apps, and broken manifests.
+- **Zero-Clone Streaming**: Confirms tarball extraction and platform binary asset matching without git clones.
+- **Operational Manual Synthesis**: Verifies deep multi-section `SKILL.md` generation.
+- **Security Audit**: Validates ZipSlip, path traversal, token isolation, and child process security.
+- **Multi-Harness E2E Matrix**: Tests real repo inspections and simulations for Claude Code, Hermes, and Gemini/Antigravity harnesses.
 
 ---
 
