@@ -1,12 +1,28 @@
-# Dependencies
+# Dependencies & Package Managers
 node_modules/
 package-lock.json.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Test coverage & runner outputs
+# Test Outputs & Coverage
 coverage/
 .nyc_output/
 test-results/
 playwright-report/
+.test-tmp/
+test-tmp/
+tests/temp*/
+tests/fixtures/temp*/
+
+# Internal Documentation, Research & Launch Drafts
+docs/
+SHOW_HN.md
+*.draft.md
+HANDOFF.md
+TECHNICAL_SPEC.md
+DEPRECATION.md
 
 # Remotion Video Production Assets & Deliverables
 out/
@@ -17,19 +33,19 @@ remotion.config.ts
 tsconfig.json
 scripts/*.mjs
 scripts/*.py
-!scripts/generate_assets.py
+scripts/generate_assets.py
 
-# Internal Developer & Non-User Files
-HANDOFF.md
-TECHNICAL_SPEC.md
-DEPRECATION.md
+# Internal Scratch & Temporary Files
 scratch/
 temp/
 tmp/
 *.tmp
 *.bak
+*.tgz
+*.tar.gz
+*.zip
 
-# install-anything local cache, installs & test harness directories
+# Local Cache, State & Agent Harness Directories
 .install-anything/
 .enlighten/
 cache/
@@ -38,17 +54,27 @@ cache/
 .claude/
 .codex/
 .cursor/
+.hermes/
+.opencode/
+.zed/
+.antigravity/
 
-# Hallmark & design review artifacts
+# Lockfiles & Concurrency Locks (Tests & Local Runtimes)
+.skill-lock.json*
+installed.json*
+*.lock
+!package-lock.json
+
+# Design Tools & Visual Generators
 .hallmark/
 /.hallmark/
 assets/.hallmark/
 brag-output*/
 
-# Netlify local state
+# Netlify Local State
 .netlify/
 
-# Environment & credentials
+# Environment, Secrets & Credentials
 .env
 .env.local
 .env.*.local
@@ -58,19 +84,11 @@ brag-output*/
 credentials.json
 token.json
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# OS metadata
+# OS Metadata & Artifacts
 .DS_Store
 Thumbs.db
 
-# Editor configurations
+# IDE & Editor Configurations
 .vscode/
 .idea/
 *.swp
