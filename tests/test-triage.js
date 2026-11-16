@@ -139,6 +139,42 @@ description: A mock skill
   assert(handoff.formattedReport.includes('Docker Desktop must be running'));
   console.log('✅ Test 6 passed: Human handoff report generation verified\n');
 
+  // Test 7: Severe Edge Cases (empty repo, malformed manifests, broken submodules, 10MB README)
+  console.log('Test 7: ReadmeGuide.classifyArchetype severe edge cases...');
+
+  // 7A: Empty repo without README
+  const emptyDir = path.join(os.tmpdir(), `test-triage-empty-${Date.now()}`);
+  fs.mkdirSync(emptyDir, { recursive: true });
+  const emptyResult = await guide.classifyArchetype(emptyDir);
+  assert.strictEqual(emptyResult.archetype, 'source-build');
+  assert.strictEqual(emptyResult.requiresClone, true);
+  fs.rmSync(emptyDir, { recursive: true, force: true });
+
+  // 7B: Malformed package.json and Cargo.toml
+  const malformedDir = path.join(os.tmpdir(), `test-triage-malformed-${Date.now()}`);
+  fs.mkdirSync(malformedDir, { recursive: true });
+  fs.writeFileSync(path.join(malformedDir, 'package.json'), 'not valid json {{{');
+  fs.writeFileSync(path.join(malformedDir, 'Cargo.toml'), 'invalid toml %%%');
+  const malformedResult = await guide.classifyArchetype(malformedDir);
+  assert.strictEqual(malformedResult.archetype, 'source-build');
+  fs.rmSync(malformedDir, { recursive: true, force: true });
+
+  // 7C: Submodules with broken URLs
+  const subDir = path.join(os.tmpdir(), `test-triage-sub-${Date.now()}`);
+  fs.mkdirSync(subDir, { recursive: true });
+  fs.writeFileSync(path.join(subDir, '.gitmodules'), '[submodule "bad"]\n\tpath = bad\n\turl = http://broken.invalid/repo.git\n');
+  const subResult = await guide.classifyArchetype(subDir);
+  assert.strictEqual(subResult.submodules, true);
+  assert(Array.isArray(subResult.submoduleUrls));
+  fs.rmSync(subDir, { recursive: true, force: true });
+
+  // 7D: 10MB README parsing
+  const bigReadme = '# Huge Repo\n\n## Installation\n\n```bash\nnpm i -g huge-tool\n```\n\n' + 'Some filler documentation line.\n'.repeat(100000);
+  const parsedBig = guide.parseInstallGuide(bigReadme, 'huge/repo');
+  assert.strictEqual(parsedBig.hasGuide, true);
+  assert.strictEqual(parsedBig.primarySuggestion.command, 'npm i -g huge-tool');
+  console.log('✅ Test 7 passed: Empty repo, malformed manifests, broken submodules, and 10MB README verified\n');
+
   // Cleanup
   fs.rmSync(testCacheDir, { recursive: true, force: true });
   fs.rmSync(mockLocalRepo, { recursive: true, force: true });

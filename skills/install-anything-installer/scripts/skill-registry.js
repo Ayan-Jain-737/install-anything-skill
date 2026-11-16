@@ -11,7 +11,7 @@ const os = require('os');
 
 class SkillRegistry {
   constructor(options = {}) {
-    this.homedir = options.homedir || os.homedir();
+    this.homedir = options.homedir || process.env.INSTALL_ANYTHING_HOME || os.homedir();
     this.dryRun = options.dryRun || false;
   }
 
@@ -149,9 +149,11 @@ class SkillRegistry {
       {
         id: 'gemini',
         name: 'Antigravity / Gemini',
-        skillsDir: path.join(base, '.gemini', 'skills'),
-        configDir: path.join(base, '.gemini'),
-        detected: fs.existsSync(path.join(base, '.gemini'))
+        skillsDir: (!isLocal && process.env.GEMINI_HOME)
+          ? path.join(process.env.GEMINI_HOME, 'skills')
+          : path.join(base, '.gemini', 'skills'),
+        configDir: (!isLocal && process.env.GEMINI_HOME) || path.join(base, '.gemini'),
+        detected: fs.existsSync((!isLocal && process.env.GEMINI_HOME) || path.join(base, '.gemini'))
       },
       {
         id: 'agents',
@@ -350,6 +352,12 @@ class SkillRegistry {
   linkOrCopy(src, dest) {
     if (this.dryRun) return;
 
+    const resolvedDest = path.resolve(dest);
+    const resolvedParent = path.dirname(resolvedDest);
+    if (resolvedDest === resolvedParent || resolvedDest === path.resolve(this.homedir)) {
+      throw new Error(`Refusing to overwrite critical system or home directory: ${dest}`);
+    }
+
     if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })) {
       fs.rmSync(dest, { recursive: true, force: true });
     }
@@ -368,18 +376,30 @@ class SkillRegistry {
     }
   }
 
-  copyRecursive(src, dest) {
+  copyRecursive(src, dest, visited = new Set()) {
     if (!fs.existsSync(src)) return;
+    try {
+      const realSrc = fs.realpathSync(src);
+      if (visited.has(realSrc)) return;
+      visited.add(realSrc);
+    } catch { return; }
+
     fs.mkdirSync(dest, { recursive: true });
     const entries = fs.readdirSync(src, { withFileTypes: true });
     for (const entry of entries) {
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        this.copyRecursive(srcPath, destPath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
+      try {
+        const lstat = fs.lstatSync(srcPath);
+        if (lstat.isSymbolicLink()) {
+          const linkTarget = fs.readlinkSync(srcPath);
+          fs.symlinkSync(linkTarget, destPath);
+        } else if (lstat.isDirectory()) {
+          this.copyRecursive(srcPath, destPath, visited);
+        } else {
+          fs.copyFileSync(srcPath, destPath);
+        }
+      } catch {}
     }
   }
 
@@ -393,6 +413,13 @@ class SkillRegistry {
     const base = isLocal ? (options.projectRoot || options.cwd || process.cwd()) : this.homedir;
     const harnesses = this.getHarnesses({ scope: isLocal ? 'local' : 'global', projectRoot: base });
     const registeredHarnesses = [];
+
+    // Sanitize skill name to prevent directory traversal or empty string
+    let skillName = (skillInfo.name || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+    if (!skillName) {
+      skillName = 'skill-' + Date.now();
+    }
+    skillInfo.name = skillName;
 
     // Determine target caller harness
     const callerHarness = options.targetHarness || options.harness || options.agent || this.detectCallerHarness(options);
@@ -470,9 +497,37 @@ class SkillRegistry {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
-    fs.writeFileSync(tmpPath, content, 'utf8');
-    fs.renameSync(tmpPath, filePath);
+    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      fs.writeFileSync(tmpPath, content, { encoding: 'utf8', mode: 0o644 });
+      let renamed = false;
+      let attempts = 0;
+      while (!renamed && attempts < 15) {
+        try {
+          fs.renameSync(tmpPath, filePath);
+          renamed = true;
+        } catch (renameErr) {
+          attempts++;
+          if (attempts >= 15) {
+            try {
+              fs.copyFileSync(tmpPath, filePath);
+              fs.unlinkSync(tmpPath);
+              renamed = true;
+            } catch {
+              throw renameErr;
+            }
+          } else {
+            const end = Date.now() + 5;
+            while (Date.now() < end) {}
+          }
+        }
+      }
+    } catch (err) {
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch {}
+      throw err;
+    }
   }
 
   /**
@@ -482,6 +537,33 @@ class SkillRegistry {
     const lockPath = lockOptions.isLocal
       ? path.join(lockOptions.base, '.skill-lock.json')
       : path.join(this.homedir, '.agents', '.skill-lock.json');
+    const lockDir = `${lockPath}.lock`;
+
+    // Spinlock with backoff to prevent race conditions during concurrent skill registrations
+    const maxRetries = 150;
+    let acquired = false;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        fs.mkdirSync(lockDir);
+        acquired = true;
+        break;
+      } catch (err) {
+        if (err.code === 'EEXIST') {
+          try {
+            const stat = fs.statSync(lockDir);
+            if (Date.now() - stat.mtimeMs > 5000) {
+              fs.rmdirSync(lockDir);
+            }
+          } catch {}
+          const delay = 5 + Math.floor(Math.random() * 20);
+          const end = Date.now() + delay;
+          while (Date.now() < end) {}
+        } else {
+          break;
+        }
+      }
+    }
+
     let lockData = { version: 3, skills: {} };
     try {
       if (fs.existsSync(lockPath)) {
@@ -503,6 +585,10 @@ class SkillRegistry {
     try {
       this.atomicWriteFileSync(lockPath, JSON.stringify(lockData, null, 2));
     } catch {}
+
+    if (acquired) {
+      try { fs.rmdirSync(lockDir); } catch {}
+    }
   }
 
   /**
@@ -534,9 +620,10 @@ class SkillRegistry {
     // Extract code blocks from README
     const recipes = [];
     if (readmeText) {
+      const scanText = readmeText.length > 512 * 1024 ? readmeText.slice(0, 512 * 1024) : readmeText;
       const codeRegex = /```(?:bash|sh|shell|console)?\s*\n([\s\S]*?)\n```/gi;
       let match;
-      while ((match = codeRegex.exec(readmeText)) !== null) {
+      while ((match = codeRegex.exec(scanText)) !== null) {
         const lines = match[1].split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
         if (lines.length > 0 && lines.some(l => l.includes(name) || (binaries[0] && l.includes(binaries[0])) || l.startsWith('docker '))) {
           recipes.push(lines.slice(0, 3).join('\n'));
@@ -549,12 +636,17 @@ class SkillRegistry {
     if (binaries.length > 0) {
       try {
         const bin = binaries[0];
-        const out = require('child_process').execSync(`${bin} --help 2>&1 || true`, {
-          timeout: 2000,
-          stdio: 'pipe'
-        }).toString('utf8');
-        if (out && out.length > 30 && !out.includes('command not found')) {
-          cliHelpOutput = out.split('\n').slice(0, 25).join('\n');
+        if (typeof bin === 'string' && /^[a-zA-Z0-9_-]+$/.test(bin)) {
+          const { spawnSync } = require('child_process');
+          const res = spawnSync(bin, ['--help'], {
+            timeout: 2000,
+            stdio: 'pipe',
+            shell: false
+          });
+          const out = res.stdout ? res.stdout.toString('utf8') : '';
+          if (out && out.length > 30 && !out.includes('command not found')) {
+            cliHelpOutput = out.split('\n').slice(0, 25).join('\n');
+          }
         }
       } catch {}
     }
@@ -630,7 +722,7 @@ ${isService ? `## Service Endpoints & Workflows
   registerCommands(commandsDir, options = {}) {
     if (!fs.existsSync(commandsDir)) return [];
     const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
-    const harnesses = this.getHarnesses();
+    const harnesses = this.getHarnesses(options);
     const installed = [];
 
     const callerHarness = options.targetHarness || options.harness || options.agent || this.detectCallerHarness(options);
@@ -667,34 +759,69 @@ ${isService ? `## Service Endpoints & Workflows
   }
 
   /**
-   * Remove a skill by name from all harnesses.
+   * Remove a skill by name from harnesses and lockfiles.
    */
-  unregisterSkill(skillName) {
-    const harnesses = this.getHarnesses();
+  unregisterSkill(skillName, options = {}) {
+    const isLocal = options.scope === 'local' || options.local;
+    const isGlobal = options.scope === 'global';
+    const base = isLocal ? (options.projectRoot || options.cwd || process.cwd()) : this.homedir;
     const removedFrom = [];
 
-    for (const harness of harnesses) {
+    const harnessesToCheck = [];
+    if (isLocal) {
+      harnessesToCheck.push(...this.getHarnesses({ scope: 'local', projectRoot: base }));
+    } else if (isGlobal) {
+      harnessesToCheck.push(...this.getHarnesses({ scope: 'global' }));
+    } else {
+      // Unspecified scope: check global harnesses, and if local workspace differs, also check local
+      harnessesToCheck.push(...this.getHarnesses({ scope: 'global' }));
+      const localBase = options.projectRoot || options.cwd || process.cwd();
+      if (path.resolve(localBase) !== path.resolve(this.homedir)) {
+        harnessesToCheck.push(...this.getHarnesses({ scope: 'local', projectRoot: localBase }));
+      }
+    }
+
+    const seenTargets = new Set();
+    for (const harness of harnessesToCheck) {
       if (harness.skillsDir) {
         const target = path.join(harness.skillsDir, skillName);
+        const resolvedTarget = path.resolve(target);
+        if (seenTargets.has(resolvedTarget)) continue;
+        seenTargets.add(resolvedTarget);
+
         if (fs.existsSync(target) || fs.lstatSync(target, { throwIfNoEntry: false })) {
           if (!this.dryRun) {
             fs.rmSync(target, { recursive: true, force: true });
           }
-          removedFrom.push(harness.name);
+          if (!removedFrom.includes(harness.name)) {
+            removedFrom.push(harness.name);
+          }
         }
       }
     }
 
-    // Also remove from ~/.agents/.skill-lock.json
-    const lockPath = path.join(this.homedir, '.agents', '.skill-lock.json');
-    if (!this.dryRun && fs.existsSync(lockPath)) {
-      try {
-        const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-        if (lock.skills && lock.skills[skillName]) {
-          delete lock.skills[skillName];
-          fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
-        }
-      } catch {}
+    // Also remove from both local and global .skill-lock.json
+    const lockPaths = [
+      path.join(base, '.skill-lock.json'),
+      path.join(this.homedir, '.agents', '.skill-lock.json'),
+      path.join(process.cwd(), '.skill-lock.json'),
+      options.projectRoot ? path.join(options.projectRoot, '.skill-lock.json') : null
+    ].filter(Boolean);
+    const seenLocks = new Set();
+    for (const lockPath of lockPaths) {
+      const resolved = path.resolve(lockPath);
+      if (seenLocks.has(resolved)) continue;
+      seenLocks.add(resolved);
+
+      if (!this.dryRun && fs.existsSync(resolved)) {
+        try {
+          const lock = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+          if (lock.skills && lock.skills[skillName]) {
+            delete lock.skills[skillName];
+            fs.writeFileSync(resolved, JSON.stringify(lock, null, 2));
+          }
+        } catch {}
+      }
     }
 
     return removedFrom;

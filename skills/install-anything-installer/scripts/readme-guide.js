@@ -65,6 +65,31 @@ class ReadmeGuide {
     } catch {}
   }
 
+  isGitHubHost(hostname) {
+    if (!hostname) return false;
+    const h = hostname.toLowerCase();
+    return h === 'github.com' || h === 'api.github.com' || h === 'raw.githubusercontent.com' || h === 'codeload.github.com' || h === 'objects.githubusercontent.com';
+  }
+
+  isPrivateOrBlockedHost(hostname) {
+    if (!hostname) return true;
+    const h = hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0') return true;
+    if (h === '169.254.169.254' || h === 'metadata.google.internal' || h === 'instance-data') return true;
+    const ipMatch = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipMatch) {
+      const b0 = parseInt(ipMatch[1], 10);
+      const b1 = parseInt(ipMatch[2], 10);
+      if (b0 === 10) return true;
+      if (b0 === 127) return true;
+      if (b0 === 169 && b1 === 254) return true;
+      if (b0 === 192 && b1 === 168) return true;
+      if (b0 === 172 && (b1 >= 16 && b1 <= 31)) return true;
+      if (b0 === 0) return true;
+    }
+    return false;
+  }
+
   /**
    * Safe fetch with token passthrough and local caching
    */
@@ -77,20 +102,38 @@ class ReadmeGuide {
     return new Promise((resolve) => {
       if (maxRedirects < 0) return resolve(null);
 
-      const client = url.startsWith('https') ? https : http;
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return resolve(null);
+      }
+
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return resolve(null);
+      }
+
+      if (this.isPrivateOrBlockedHost(parsed.hostname)) {
+        return resolve(null);
+      }
+
+      const client = parsed.protocol === 'https:' ? https : http;
       const headers = {
         'User-Agent': 'ias-installer/3.1 (+https://github.com/Ayan-Jain-737/install-anything-skill)'
       };
 
-      // Token passthrough if GitHub API or private repo
+      // Token passthrough ONLY to legitimate GitHub hostnames
       const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-      if (token && url.includes('github.com')) {
+      if (token && this.isGitHubHost(parsed.hostname)) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
       const req = client.get(url, { headers }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return resolve(this.fetchUrl(res.headers.location, maxRedirects - 1));
+          const redirectUrl = res.headers.location.startsWith('http')
+            ? res.headers.location
+            : new URL(res.headers.location, url).href;
+          return resolve(this.fetchUrl(redirectUrl, maxRedirects - 1));
         }
         if (res.statusCode !== 200) {
           return resolve(null);
@@ -147,7 +190,11 @@ class ReadmeGuide {
     if (!coords) return null;
 
     if (coords.isLocal) {
-      const p = path.join(coords.path, filename);
+      const resolvedBase = path.resolve(coords.path);
+      const p = path.resolve(coords.path, filename);
+      if (!p.startsWith(resolvedBase)) {
+        return null; // Prevent path traversal
+      }
       if (fs.existsSync(p)) {
         return fs.readFileSync(p, 'utf8');
       }
@@ -156,7 +203,7 @@ class ReadmeGuide {
 
     const branches = ['HEAD', 'main', 'master'];
     for (const b of branches) {
-      const url = `https://raw.githubusercontent.com/${coords.owner}/${coords.repo}/${b}/${filename}`;
+      const url = `https://raw.githubusercontent.com/${encodeURIComponent(coords.owner)}/${encodeURIComponent(coords.repo)}/${b}/${encodeURIComponent(filename)}`;
       const data = await this.fetchUrl(url);
       if (data && !data.startsWith('404: Not Found')) {
         return data;
@@ -212,12 +259,16 @@ class ReadmeGuide {
   extractTargetedSections(readmeText) {
     if (!readmeText) return '';
 
+    // Guard against huge strings for regex scanning
+    const boundedText = readmeText.length > 2 * 1024 * 1024 ? readmeText.slice(0, 2 * 1024 * 1024) : readmeText;
+
     // Match sections with headers like: ## Installation, ## Quick Start, ## Getting Started, ## Setup, ## How to install
     const sectionRegex = /(?:^|\n)#{1,3}\s*(?:install(?:ation)?|quick\s*start|getting\s*started|setup|how\s*to\s*use|usage)\b([\s\S]*?)(?=(?:\n#{1,3}\s+[^\n]+)|$)/gi;
     let combined = '';
     let match;
-    while ((match = sectionRegex.exec(readmeText)) !== null) {
+    while ((match = sectionRegex.exec(boundedText)) !== null) {
       combined += '\n' + match[1];
+      if (combined.length > 50000) break;
     }
 
     return combined.trim();
@@ -233,13 +284,17 @@ class ReadmeGuide {
 
     // First try targeted installation sections to avoid false positives in big READMEs
     const targetedText = this.extractTargetedSections(readmeText);
-    const textToScan = targetedText.length > 50 ? targetedText : readmeText;
+    let textToScan = targetedText.length > 50 ? targetedText : readmeText;
+    if (textToScan.length > 1024 * 1024) {
+      textToScan = textToScan.slice(0, 1024 * 1024);
+    }
 
     const codeBlocks = [];
     const codeRegex = /```(?:bash|sh|shell|console|zsh|powershell)?\s*\n([\s\S]*?)\n```/gi;
     let match;
     while ((match = codeRegex.exec(textToScan)) !== null) {
       codeBlocks.push(match[1].trim());
+      if (codeBlocks.length >= 100) break;
     }
 
     // Also check inline commands
@@ -248,6 +303,7 @@ class ReadmeGuide {
       const cmd = match[1].trim();
       if (/^(?:npx|npm|pnpm|yarn|bun|pip|uv|pipx|cargo|brew|curl|docker)\s/i.test(cmd)) {
         codeBlocks.push(cmd);
+        if (codeBlocks.length >= 150) break;
       }
     }
 
@@ -418,7 +474,7 @@ class ReadmeGuide {
         this.fetchRawFile(repoInput, 'pyproject.toml'),
         this.fetchRawFile(repoInput, 'Dockerfile'),
         this.fetchRawFile(repoInput, 'docker-compose.yml'),
-        this.fetchRawFile(repoInput, 'gitmodules'),
+        this.fetchRawFile(repoInput, '.gitmodules'),
         this.fetchRawFile(repoInput, 'SKILL.md')
       ]);
 
@@ -446,7 +502,17 @@ class ReadmeGuide {
     }
 
     if (dockerfile || compose) result.hasDocker = true;
-    if (gitmodules) result.submodules = true;
+    if (gitmodules && typeof gitmodules === 'string') {
+      result.submodules = true;
+      try {
+        const urls = [];
+        const matches = gitmodules.matchAll(/url\s*=\s*([^\r\n]+)/g);
+        for (const m of matches) {
+          urls.push(m[1].trim());
+        }
+        result.submoduleUrls = urls;
+      } catch {}
+    }
 
     // Archetype 1: Prompt Skill Pack
     if (result.hasSkills) {
@@ -459,27 +525,29 @@ class ReadmeGuide {
     // Archetype 3: CLI Package Manager Tool
     if (pkgJson) {
       try {
-        const pkg = JSON.parse(pkgJson);
-        if (pkg.bin) {
+        const pkg = typeof pkgJson === 'string' ? JSON.parse(pkgJson) : pkgJson;
+        if (pkg && typeof pkg === 'object' && !Array.isArray(pkg) && pkg.bin) {
           result.archetype = 'pkg-tool';
           result.requiresClone = false;
           result.suggestedMethod = 'npm-install';
           result.binaries = typeof pkg.bin === 'string'
             ? [pkg.name || 'tool']
-            : Object.keys(pkg.bin);
+            : (typeof pkg.bin === 'object' && pkg.bin !== null ? Object.keys(pkg.bin) : []);
           return result;
         }
       } catch {}
     }
 
-    if (cargoToml && (cargoToml.includes('[[bin]]') || cargoToml.includes('[package]'))) {
-      const match = cargoToml.match(/name\s*=\s*["']([^"']+)["']/);
-      if (match) {
-        result.binaries.push(match[1]);
-      }
+    if (cargoToml && typeof cargoToml === 'string' && (cargoToml.includes('[[bin]]') || cargoToml.includes('[package]'))) {
+      try {
+        const match = cargoToml.match(/name\s*=\s*["']([^"']+)["']/);
+        if (match && match[1]) {
+          result.binaries.push(match[1]);
+        }
+      } catch {}
     }
 
-    if (pyproject && pyproject.includes('[project.scripts]')) {
+    if (pyproject && typeof pyproject === 'string' && pyproject.includes('[project.scripts]')) {
       result.archetype = 'pkg-tool';
       result.requiresClone = false;
       result.suggestedMethod = 'uv-tool';
@@ -497,13 +565,15 @@ class ReadmeGuide {
     // Check for web app without Docker
     if (pkgJson) {
       try {
-        const pkg = JSON.parse(pkgJson);
-        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-        if (deps.next || deps.react || deps.vue || deps.express || deps.fastify) {
-          result.archetype = 'web-app';
-          result.requiresClone = false;
-          result.suggestedMethod = 'service-skill';
-          return result;
+        const pkg = typeof pkgJson === 'string' ? JSON.parse(pkgJson) : pkgJson;
+        if (pkg && typeof pkg === 'object' && !Array.isArray(pkg)) {
+          const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+          if (deps.next || deps.react || deps.vue || deps.express || deps.fastify) {
+            result.archetype = 'web-app';
+            result.requiresClone = false;
+            result.suggestedMethod = 'service-skill';
+            return result;
+          }
         }
       } catch {}
     }
@@ -531,7 +601,9 @@ class ReadmeGuide {
   probeReleaseAvailability(owner, repo) {
     return new Promise((resolve) => {
       if (!owner || !repo || owner === 'local') return resolve(null);
-      const req = https.get(`https://github.com/${owner}/${repo}/releases/latest`, {
+      const safeOwner = encodeURIComponent(owner);
+      const safeRepo = encodeURIComponent(repo);
+      const req = https.get(`https://github.com/${safeOwner}/${safeRepo}/releases/latest`, {
         headers: { 'User-Agent': 'ias-installer/3.1' }
       }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && res.headers.location.includes('/releases/tag/')) {

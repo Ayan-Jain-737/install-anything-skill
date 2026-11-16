@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const { InstallAnythingScanner, EnlightenScanner } = require('../skills/install-anything-installer/scripts/scan-repo');
 const { ScriptAdapter } = require('../skills/install-anything-installer/scripts/adapt-install');
@@ -26,7 +26,7 @@ class InstallAnythingCLI {
       pkg = require('../package.json');
     } catch {}
     this.version = pkg.version;
-    this.homedir = options.homedir || os.homedir();
+    this.homedir = options.homedir || process.env.INSTALL_ANYTHING_HOME || os.homedir();
 
     // Prefer ~/.install-anything with fallback to legacy ~/.enlighten
     const newDir = path.join(this.homedir, '.install-anything');
@@ -66,7 +66,7 @@ class InstallAnythingCLI {
    * Normalize any repo input (URL, shorthand, or local path)
    */
   normalizeRepoUrl(input) {
-    let clean = input.trim();
+    let clean = (input || '').trim();
     if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(clean)) {
       clean = `https://github.com/${clean}.git`;
     } else if (clean.startsWith('github.com/')) {
@@ -84,6 +84,12 @@ class InstallAnythingCLI {
       owner = 'local';
       repoName = path.basename(path.resolve(clean));
     }
+
+    // Sanitize owner and repoName against path traversal
+    owner = owner.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+    repoName = repoName.replace(/[^a-zA-Z0-9_.-]/g, '-').replace(/^-+|-+$/g, '');
+    if (!owner || owner === '..' || owner === '.') owner = 'repo-owner';
+    if (!repoName || repoName === '..' || repoName === '.') repoName = 'repo-' + Date.now();
 
     const identifier = `${owner}-${repoName}`.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
 
@@ -106,11 +112,73 @@ class InstallAnythingCLI {
   }
 
   saveInstalled(list) {
+    const dir = path.dirname(this.installedRegistry);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const tmpPath = `${this.installedRegistry}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
     try {
-      const tmpPath = `${this.installedRegistry}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
       fs.writeFileSync(tmpPath, JSON.stringify({ installations: list }, null, 2));
-      fs.renameSync(tmpPath, this.installedRegistry);
-    } catch {}
+      let renamed = false;
+      let attempts = 0;
+      while (!renamed && attempts < 15) {
+        try {
+          fs.renameSync(tmpPath, this.installedRegistry);
+          renamed = true;
+        } catch (renameErr) {
+          attempts++;
+          if (attempts >= 15) {
+            try {
+              fs.copyFileSync(tmpPath, this.installedRegistry);
+              fs.unlinkSync(tmpPath);
+              renamed = true;
+            } catch {
+              throw renameErr;
+            }
+          } else {
+            const end = Date.now() + 5;
+            while (Date.now() < end) {}
+          }
+        }
+      }
+    } catch (err) {
+      try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
+    }
+  }
+
+  recordInstallation(item) {
+    const lockDir = `${this.installedRegistry}.lock`;
+    const maxRetries = 150;
+    let acquired = false;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        fs.mkdirSync(lockDir);
+        acquired = true;
+        break;
+      } catch (err) {
+        if (err.code === 'EEXIST') {
+          try {
+            const stat = fs.statSync(lockDir);
+            if (Date.now() - stat.mtimeMs > 5000) {
+              fs.rmdirSync(lockDir);
+            }
+          } catch {}
+          const delay = 5 + Math.floor(Math.random() * 20);
+          const end = Date.now() + delay;
+          while (Date.now() < end) {}
+        } else {
+          break;
+        }
+      }
+    }
+
+    try {
+      const installed = this.getInstalled().filter(i => i.identifier !== item.identifier);
+      installed.push(item);
+      this.saveInstalled(installed);
+    } finally {
+      if (acquired) {
+        try { fs.rmdirSync(lockDir); } catch {}
+      }
+    }
   }
 
   ensureClone(norm, targetDir, options = {}) {
@@ -119,6 +187,16 @@ class InstallAnythingCLI {
       this.skillRegistry.linkOrCopy(path.resolve(norm.url), targetDir);
       return true;
     }
+    // Block git option/flag injection in norm.url
+    if (norm.url.startsWith('-')) {
+      return false;
+    }
+
+    const resolvedTarget = path.resolve(targetDir);
+    if (!resolvedTarget.startsWith(path.resolve(this.reposDir))) {
+      return false;
+    }
+
     if (fs.existsSync(targetDir)) {
       if (options.force || !fs.existsSync(path.join(targetDir, '.git'))) {
         fs.rmSync(targetDir, { recursive: true, force: true });
@@ -129,14 +207,33 @@ class InstallAnythingCLI {
     const parent = path.dirname(targetDir);
     if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
 
-    const recursiveFlag = (options.recursive || options.submodules) ? ' --recursive' : '';
+    const gitArgs = ['clone', '--depth', '1'];
+    if (options.recursive || options.submodules) {
+      gitArgs.push('--recursive');
+    }
+    gitArgs.push('--', norm.url, targetDir);
+
     try {
-      execSync(`git clone --depth 1${recursiveFlag} "${norm.url}" "${targetDir}"`, {
+      execFileSync('git', gitArgs, {
         stdio: 'pipe',
         timeout: 300000
       });
       return true;
     } catch (e) {
+      // If clone with --recursive failed (e.g. broken submodule URL), retry clone without recursive
+      if (gitArgs.includes('--recursive')) {
+        try {
+          if (fs.existsSync(targetDir)) {
+            fs.rmSync(targetDir, { recursive: true, force: true });
+          }
+          const fallbackArgs = gitArgs.filter(a => a !== '--recursive');
+          execFileSync('git', fallbackArgs, {
+            stdio: 'pipe',
+            timeout: 300000
+          });
+          return true;
+        } catch {}
+      }
       return false;
     }
   }
@@ -154,10 +251,15 @@ class InstallAnythingCLI {
     if (fs.existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        if (typeof pkg.bin === 'string') {
-          const binName = pkg.name || path.basename(targetDir);
-          const binSrc = path.resolve(targetDir, pkg.bin);
+        const linkBin = (rawBinName, relPath) => {
+          const binName = path.basename(rawBinName).replace(/[^a-zA-Z0-9_-]/g, '');
+          if (!binName || binName === '.' || binName === '..') return;
+          const binSrc = path.resolve(targetDir, relPath);
           const binDest = path.join(localBin, binName);
+          // Verify binSrc is inside targetDir and binDest is inside localBin
+          if (!binSrc.startsWith(path.resolve(targetDir))) return;
+          if (!path.resolve(binDest).startsWith(path.resolve(localBin))) return;
+
           if (fs.existsSync(binSrc)) {
             try {
               if (fs.existsSync(binDest)) fs.rmSync(binDest, { force: true });
@@ -166,18 +268,13 @@ class InstallAnythingCLI {
               exposed.push(binName);
             } catch {}
           }
+        };
+
+        if (typeof pkg.bin === 'string') {
+          linkBin(pkg.name || path.basename(targetDir), pkg.bin);
         } else if (pkg.bin && typeof pkg.bin === 'object') {
           for (const [binName, relPath] of Object.entries(pkg.bin)) {
-            const binSrc = path.resolve(targetDir, relPath);
-            const binDest = path.join(localBin, binName);
-            if (fs.existsSync(binSrc)) {
-              try {
-                if (fs.existsSync(binDest)) fs.rmSync(binDest, { force: true });
-                fs.symlinkSync(binSrc, binDest);
-                fs.chmodSync(binSrc, 0o755);
-                exposed.push(binName);
-              } catch {}
-            }
+            linkBin(binName, relPath);
           }
         }
       } catch {}
@@ -271,6 +368,10 @@ class InstallAnythingCLI {
     let executedCommand = null;
     let guideFollowed = false;
     const targetDir = path.join(this.reposDir, norm.owner, norm.repoName);
+    const resolvedTarget = path.resolve(targetDir);
+    if (!resolvedTarget.startsWith(path.resolve(this.reposDir))) {
+      throw new Error(`Security Violation: Target directory traversal detected: ${targetDir}`);
+    }
 
     // =========================================================================
     // STEP 2: Follow what the repository suggests!
@@ -291,16 +392,21 @@ class InstallAnythingCLI {
       } else {
         // Option A: Skills CLI install (e.g. npx skills add ...)
         if (suggestion.type === 'skills_cli') {
-          let cmd = suggestion.command;
-          if (!cmd.includes('-y')) cmd += ' -y';
-          if (!cmd.includes('-g') && !cmd.includes('--global')) cmd += ' -g';
-          try {
-            if (!isJson) console.log(`   🚀 Running: ${cmd}`);
-            execSync(cmd, { stdio: 'inherit', timeout: 180000 });
-            executedCommand = cmd;
-            guideFollowed = true;
-          } catch (e) {
-            if (!isJson) console.log(`   ⚠️ Skills CLI notice: ${e.message}`);
+          const trimmed = (suggestion.command || '').trim();
+          if (/^npx\s+skills\s+add\s+[a-zA-Z0-9_@./-]+(?:\s+-[a-zA-Z0-9_-]+)*$/.test(trimmed)) {
+            let cmd = trimmed;
+            if (!cmd.includes('-y')) cmd += ' -y';
+            if (!cmd.includes('-g') && !cmd.includes('--global')) cmd += ' -g';
+            try {
+              if (!isJson) console.log(`   🚀 Running: ${cmd}`);
+              execSync(cmd, { stdio: 'inherit', timeout: 180000 });
+              executedCommand = cmd;
+              guideFollowed = true;
+            } catch (e) {
+              if (!isJson) console.log(`   ⚠️ Skills CLI notice: ${e.message}`);
+            }
+          } else {
+            if (!isJson) console.log(`   ⚠️ Skipping untrusted skills CLI command containing special characters: "${trimmed}"`);
           }
         }
         // Option B: One-liner script installer (curl | bash) or global package install
@@ -415,8 +521,9 @@ class InstallAnythingCLI {
       }
     }
 
-    // 1. Sync skills from Open Agents (~/.agents/skills) to the active harness
-    const syncedSkills = this.skillRegistry.syncAllGlobalSkills({
+    // 1. Sync skills from Open Agents (~/.agents/skills) to the active harness (only for global installs)
+    const isLocal = options.scope === 'local' || options.local;
+    const syncedSkills = isLocal ? [] : this.skillRegistry.syncAllGlobalSkills({
       targetHarness: callerHarness,
       allHarnesses: isAllHarnesses
     });
@@ -436,7 +543,7 @@ class InstallAnythingCLI {
             allHarnesses: isAllHarnesses,
             scope: options.scope,
             local: options.local,
-            projectRoot: options.projectRoot
+            projectRoot: options.projectRoot || (isLocal ? process.cwd() : undefined)
           });
           registeredSkillsManifest.push({
             name: s.name,
@@ -459,7 +566,7 @@ class InstallAnythingCLI {
           allHarnesses: isAllHarnesses,
           scope: options.scope,
           local: options.local,
-          projectRoot: options.projectRoot
+          projectRoot: options.projectRoot || (isLocal ? process.cwd() : undefined)
         });
         registeredSkillsManifest.push({
           name: gen.name,
@@ -485,19 +592,19 @@ class InstallAnythingCLI {
 
     // Record in registry
     if (!options.dryRun) {
-      const installed = this.getInstalled().filter(i => i.identifier !== norm.identifier);
-      installed.push({
+      this.recordInstallation({
         identifier: norm.identifier,
         repo_url: norm.url,
         install_dir: fs.existsSync(targetDir) ? targetDir : 'global_skills_cli',
         installed_at: new Date().toISOString(),
         guide_command: executedCommand,
         guide_followed: guideFollowed,
+        scope: isLocal ? 'local' : 'global',
+        project_root: isLocal ? (options.projectRoot || process.cwd()) : undefined,
         skills_registered: registeredSkillsManifest,
         skills_synced: syncedSkills.map(s => s.skill),
         version: this.version
       });
-      this.saveInstalled(installed);
     }
 
     const result = {
@@ -537,9 +644,20 @@ class InstallAnythingCLI {
     const cleanId = identifierInput.trim().toLowerCase();
 
     const installed = this.getInstalled();
-    const item = installed.find(i => i.identifier === cleanId || i.repo_url === identifierInput || i.identifier.endsWith(cleanId));
+    const item = installed.find(i => i.identifier === cleanId || i.repo_url === identifierInput || i.identifier.endsWith(cleanId) || (i.skills_registered && i.skills_registered.some(s => s.name === cleanId)));
 
     if (!item) {
+      // Check if identifier corresponds to an unregisterable skill directly
+      const removedFrom = this.skillRegistry.unregisterSkill(cleanId, options);
+      if (removedFrom.length > 0) {
+        if (isJson) {
+          console.log(JSON.stringify({ status: 'success', identifier: cleanId, uninstalledSkills: [{ name: cleanId, removedFrom }] }, null, 2));
+        } else {
+          console.log(`\n✅ Successfully uninstalled skill "${cleanId}" (removed from: ${removedFrom.join(', ')})!\n`);
+        }
+        return { status: 'success', identifier: cleanId, uninstalledSkills: [{ name: cleanId, removedFrom }] };
+      }
+
       const errMsg = `No installation found with identifier: "${identifierInput}"`;
       if (isJson) {
         console.log(JSON.stringify({ status: 'not_found', error: errMsg }, null, 2));
@@ -569,7 +687,12 @@ class InstallAnythingCLI {
     const uninstalledSkills = [];
     if (item.skills_registered && Array.isArray(item.skills_registered)) {
       for (const s of item.skills_registered) {
-        const removedFrom = this.skillRegistry.unregisterSkill(s.name);
+        const unregisterOpts = {
+          ...options,
+          scope: options.scope || item.scope,
+          projectRoot: options.projectRoot || item.project_root || (options.scope === 'local' || item.scope === 'local' ? process.cwd() : undefined)
+        };
+        const removedFrom = this.skillRegistry.unregisterSkill(s.name, unregisterOpts);
         uninstalledSkills.push({ name: s.name, removedFrom });
         if (!isJson) console.log(`   • Unregistered skill: "${s.name}"`);
       }
@@ -577,10 +700,13 @@ class InstallAnythingCLI {
 
     // 2. Remove repository directory if it exists
     if (item.install_dir && fs.existsSync(item.install_dir) && item.install_dir !== 'global_skills_cli') {
-      try {
-        fs.rmSync(item.install_dir, { recursive: true, force: true });
-        if (!isJson) console.log(`   • Deleted repository directory: ${item.install_dir}`);
-      } catch {}
+      const resolvedInstallDir = path.resolve(item.install_dir);
+      if (resolvedInstallDir.startsWith(path.resolve(this.reposDir))) {
+        try {
+          fs.rmSync(resolvedInstallDir, { recursive: true, force: true });
+          if (!isJson) console.log(`   • Deleted repository directory: ${resolvedInstallDir}`);
+        } catch {}
+      }
     }
 
     // 3. Update registry
@@ -887,7 +1013,14 @@ WORKFLOW:
           console.error('Error: identifier required (use "install-anything list-installed" to see identifiers)');
           process.exit(1);
         }
-        cli.uninstall(target, { json: isJson, force: isForce, dryRun: isDryRun });
+        cli.uninstall(target, {
+          json: isJson,
+          force: isForce,
+          dryRun: isDryRun,
+          scope: isLocal ? 'local' : (args.includes('--scope=global') ? 'global' : undefined),
+          local: isLocal,
+          projectRoot: isLocal ? process.cwd() : undefined
+        });
         break;
 
       default:

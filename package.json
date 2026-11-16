@@ -57,7 +57,7 @@
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
     "install": "node scripts/postinstall.js",
-    "test": "node tests/test-triage.js && node tests/test-releases.js && node tests/test-synthesis.js && node tests/test-zero-clone.js && node tests/test-scanner.js && node tests/test-skills.js && node tests/test-finder.js && node tests/test-lifecycle.js",
+    "test": "node tests/test-concurrency.js && node tests/test-triage.js && node tests/test-releases.js && node tests/test-synthesis.js && node tests/test-zero-clone.js && node tests/test-security-audit.js && node tests/test-scanner.js && node tests/test-skills.js && node tests/test-finder.js && node tests/test-lifecycle.js && node tests/test-e2e-matrix.js",
     "find": "node bin/install-anything find",
     "inspect": "node bin/install-anything inspect",
     "diagnose": "node bin/install-anything diagnose",

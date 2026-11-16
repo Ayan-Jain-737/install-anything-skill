@@ -63,6 +63,38 @@ const { ScriptAdapter } = require('../skills/install-anything-installer/scripts/
   assert.strictEqual(adapter.matchesSkillFilter('anything', null), true);
   console.log('✅ Test 4 passed: Skill filter matching verified\n');
 
+  // Test 5: Linux Asset Matching with AppImage, deb, rpm, dmg, exe
+  console.log('Test 5: Matching Linux AppImage and excluding .exe, .dmg, .deb, .rpm...');
+  const mockAssetsAppImage = [
+    { name: 'desktop-tool_x86_64.AppImage', browser_download_url: 'https://github.com/.../app.AppImage' },
+    { name: 'desktop-tool_amd64.deb', browser_download_url: 'https://github.com/.../app.deb' },
+    { name: 'desktop-tool_x86_64.rpm', browser_download_url: 'https://github.com/.../app.rpm' },
+    { name: 'desktop-tool_x64.dmg', browser_download_url: 'https://github.com/.../app.dmg' },
+    { name: 'desktop-tool_x64.exe', browser_download_url: 'https://github.com/.../app.exe' }
+  ];
+  const matchedAppImage = adapter.matchReleaseAsset(mockAssetsAppImage, { os: 'linux', arch: 'x64' });
+  assert(matchedAppImage, 'Should match Linux asset');
+  assert.strictEqual(matchedAppImage.name, 'desktop-tool_x86_64.AppImage');
+  assert(!matchedAppImage.name.endsWith('.exe'), 'Must not match .exe on Linux');
+  assert(!matchedAppImage.name.endsWith('.dmg'), 'Must not match .dmg on Linux');
+  console.log('✅ Test 5 passed: AppImage cleanly matched and incompatible OS formats excluded\n');
+
+  // Test 6: Archive Matching for .tar.bz2 and .tar.xz
+  console.log('Test 6: Matching .tar.bz2 and .tar.xz archives...');
+  const mockAssetsBz2 = [
+    { name: 'mytool-1.0.0-linux-x86_64.tar.bz2' },
+    { name: 'mytool-1.0.0-linux-x86_64.sha256' }
+  ];
+  const matchedBz2 = adapter.matchReleaseAsset(mockAssetsBz2, { os: 'linux', arch: 'x64' });
+  assert.strictEqual(matchedBz2.name, 'mytool-1.0.0-linux-x86_64.tar.bz2');
+
+  const mockAssetsXz = [
+    { name: 'mytool-1.0.0-linux-x86_64.tar.xz' }
+  ];
+  const matchedXz = adapter.matchReleaseAsset(mockAssetsXz, { os: 'linux', arch: 'x64' });
+  assert.strictEqual(matchedXz.name, 'mytool-1.0.0-linux-x86_64.tar.xz');
+  console.log('✅ Test 6 passed: .tar.bz2 and .tar.xz archives correctly matched\n');
+
   console.log('='.repeat(50));
   console.log('🎉 ALL RELEASE & ZERO-CLONE MATCHER TESTS PASSED!\n');
 })();

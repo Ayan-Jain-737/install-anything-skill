@@ -10,7 +10,7 @@ const path = require('path');
 const os = require('os');
 const https = require('https');
 const http = require('http');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 class ScriptAdapter {
   constructor(options = {}) {
@@ -449,40 +449,41 @@ class ScriptAdapter {
 
   generateUninstallScript(identifier) {
     const harness = this.detectHarness();
+    const cleanId = (identifier || '').replace(/[^a-zA-Z0-9_-]/g, '');
     const uninstallSteps = [];
 
     switch (harness) {
       case 'hermes':
-        uninstallSteps.push(`npx ecc plugin remove ${identifier}`);
-        uninstallSteps.push(`rm -rf ~/.hermes/plugins/${identifier}`);
-        uninstallSteps.push(`sed -i '/${identifier}/d' ~/.hermes/profiles/*/profile.json 2>/dev/null || true`);
+        uninstallSteps.push(`npx ecc plugin remove ${cleanId}`);
+        uninstallSteps.push(`rm -rf ~/.hermes/plugins/${cleanId}`);
+        uninstallSteps.push(`sed -i '/${cleanId}/d' ~/.hermes/profiles/*/profile.json 2>/dev/null || true`);
         break;
       case 'claude':
-        uninstallSteps.push(`/plugin remove ${identifier}`);
-        uninstallSteps.push(`rm -rf ~/.claude/plugins/${identifier}`);
+        uninstallSteps.push(`/plugin remove ${cleanId}`);
+        uninstallSteps.push(`rm -rf ~/.claude/plugins/${cleanId}`);
         break;
       case 'opencode':
-        uninstallSteps.push(`opencode --uninstall ${identifier}`);
-        uninstallSteps.push(`rm -rf ~/.config/opencode/plugins/${identifier}`);
+        uninstallSteps.push(`opencode --uninstall ${cleanId}`);
+        uninstallSteps.push(`rm -rf ~/.config/opencode/plugins/${cleanId}`);
         break;
       case 'codex':
-        uninstallSteps.push(`codex plugin remove ${identifier}`);
-        uninstallSteps.push(`rm -rf ~/.codex/plugins/${identifier}`);
+        uninstallSteps.push(`codex plugin remove ${cleanId}`);
+        uninstallSteps.push(`rm -rf ~/.codex/plugins/${cleanId}`);
         break;
       default:
         uninstallSteps.push(`# Manual uninstall for ${harness}: remove plugin and config`);
     }
 
     return {
-      identifier: identifier,
+      identifier: cleanId,
       harness: harness,
       steps: uninstallSteps,
       cleanup_files: [
-        `~/.hermes/cache/${identifier}`,
-        `~/.hermes/logs/${identifier}.log`,
-        `~/.claude/plugins/${identifier}`,
-        `~/.config/opencode/plugins/${identifier}`,
-        `~/.codex/plugins/${identifier}`
+        `~/.hermes/cache/${cleanId}`,
+        `~/.hermes/logs/${cleanId}.log`,
+        `~/.claude/plugins/${cleanId}`,
+        `~/.config/opencode/plugins/${cleanId}`,
+        `~/.codex/plugins/${cleanId}`
       ]
     };
   }
@@ -500,7 +501,7 @@ class ScriptAdapter {
 
     const OS_PATTERNS = {
       darwin: /(darwin|mac.?os|osx|apple)/i,
-      linux: /(linux|unknown-linux)/i,
+      linux: /(linux|unknown-linux|appimage)/i,
       windows: /(win|windows)/i
     };
 
@@ -513,7 +514,12 @@ class ScriptAdapter {
     const osRegex = OS_PATTERNS[targetOS] || OS_PATTERNS.linux;
     const archRegex = ARCH_PATTERNS[targetArch] || ARCH_PATTERNS.x64;
 
-    const excludedExts = /\.(deb|rpm|msi|sha256|sha512|asc|sig|txt|md|html)$/i;
+    const OS_EXCLUDED_EXTS = {
+      linux: /\.(deb|rpm|msi|exe|dmg|pkg|sha256|sha512|asc|sig|txt|md|html)$/i,
+      darwin: /\.(deb|rpm|msi|exe|appimage|sha256|sha512|asc|sig|txt|md|html)$/i,
+      windows: /\.(deb|rpm|dmg|pkg|appimage|sha256|sha512|asc|sig|txt|md|html)$/i
+    };
+    const excludedExts = OS_EXCLUDED_EXTS[targetOS] || OS_EXCLUDED_EXTS.linux;
 
     const candidates = assetList.filter(a => {
       const name = a.name || a.browser_download_url || '';
@@ -525,7 +531,7 @@ class ScriptAdapter {
     if (candidates.length === 1) return candidates[0];
 
     // Priority scoring:
-    // 1. Prefer archives (.tar.gz, .tgz, .zip, .tar.xz)
+    // 1. Prefer archives (.tar.gz, .tgz, .zip, .tar.xz, .tar.bz2)
     // 2. On Linux, prefer musl over gnu
     // 3. Shorter filename often means cleaner target
     candidates.sort((a, b) => {
@@ -535,10 +541,12 @@ class ScriptAdapter {
       let scoreA = 0;
       let scoreB = 0;
 
-      if (/\.(tar\.gz|tgz)$/i.test(nameA)) scoreA += 10;
-      if (/\.(tar\.gz|tgz)$/i.test(nameB)) scoreB += 10;
+      if (/\.(tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2)$/i.test(nameA)) scoreA += 10;
+      if (/\.(tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2)$/i.test(nameB)) scoreB += 10;
       if (/\.zip$/i.test(nameA)) scoreA += 8;
       if (/\.zip$/i.test(nameB)) scoreB += 8;
+      if (/\.appimage$/i.test(nameA)) scoreA += 7;
+      if (/\.appimage$/i.test(nameB)) scoreB += 7;
 
       if (targetOS === 'linux') {
         if (/musl/i.test(nameA)) scoreA += 5;
@@ -570,18 +578,59 @@ class ScriptAdapter {
     return regex.test(skillName);
   }
 
+  isGitHubHost(hostname) {
+    if (!hostname) return false;
+    const h = hostname.toLowerCase();
+    return h === 'github.com' || h === 'api.github.com' || h === 'raw.githubusercontent.com' || h === 'codeload.github.com' || h === 'objects.githubusercontent.com';
+  }
+
+  isPrivateOrBlockedHost(hostname) {
+    if (!hostname) return true;
+    const h = hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0') return true;
+    if (h === '169.254.169.254' || h === 'metadata.google.internal' || h === 'instance-data') return true;
+    const ipMatch = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipMatch) {
+      const b0 = parseInt(ipMatch[1], 10);
+      const b1 = parseInt(ipMatch[2], 10);
+      if (b0 === 10) return true;
+      if (b0 === 127) return true;
+      if (b0 === 169 && b1 === 254) return true;
+      if (b0 === 192 && b1 === 168) return true;
+      if (b0 === 172 && (b1 >= 16 && b1 <= 31)) return true;
+      if (b0 === 0) return true;
+    }
+    return false;
+  }
+
   /**
    * Helper to download a remote URL directly to a file following HTTP 3xx redirects
    */
   downloadToFile(url, destPath, maxRedirects = 5) {
     return new Promise((resolve, reject) => {
       if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
-      const client = url.startsWith('https:') ? https : http;
+
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return reject(new Error('Invalid download URL: ' + url));
+      }
+
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return reject(new Error('Unsupported protocol: ' + parsed.protocol));
+      }
+
+      if (this.isPrivateOrBlockedHost(parsed.hostname)) {
+        return reject(new Error('Blocked request to private or metadata network address'));
+      }
+
+      const client = parsed.protocol === 'https:' ? https : http;
       const headers = {
         'User-Agent': 'ias-installer/3.1 (+https://github.com/Ayan-Jain-737/install-anything-skill)'
       };
       const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-      if (token && (url.includes('api.github.com') || url.includes('github.com'))) {
+      if (token && this.isGitHubHost(parsed.hostname) && (parsed.hostname === 'github.com' || parsed.hostname === 'api.github.com')) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
@@ -753,18 +802,24 @@ class ScriptAdapter {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     try {
-      const assetFile = path.join(tmpDir, matched.name);
+      // Sanitize asset filename to prevent path traversal
+      const safeAssetName = path.basename((matched.name || 'asset').replace(/\\/g, '/')).replace(/[^a-zA-Z0-9_.-]/g, '_');
+      if (!safeAssetName || safeAssetName === '.' || safeAssetName === '..') {
+        return { status: 'error', message: 'Invalid release asset filename' };
+      }
+
+      const assetFile = path.join(tmpDir, safeAssetName);
       await this.downloadToFile(matched.browser_download_url, assetFile);
 
       const extractDir = path.join(tmpDir, 'extracted');
       fs.mkdirSync(extractDir, { recursive: true });
 
-      if (/\.(tar\.gz|tgz|tar\.xz)$/i.test(matched.name)) {
-        execSync(`tar -xf "${assetFile}" -C "${extractDir}"`, { stdio: 'pipe' });
-      } else if (/\.zip$/i.test(matched.name)) {
-        execSync(`unzip -q -o "${assetFile}" -d "${extractDir}"`, { stdio: 'pipe' });
+      if (/\.(tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2)$/i.test(safeAssetName)) {
+        execFileSync('tar', ['-xf', assetFile, '-C', extractDir], { stdio: 'pipe' });
+      } else if (/\.zip$/i.test(safeAssetName)) {
+        execFileSync('unzip', ['-q', '-o', assetFile, '-d', extractDir], { stdio: 'pipe' });
       } else {
-        // Raw executable
+        // Raw executable or AppImage
         const targetBin = path.join(binDir, repo);
         fs.copyFileSync(assetFile, targetBin);
         fs.chmodSync(targetBin, 0o755);
@@ -773,36 +828,116 @@ class ScriptAdapter {
           binaryPath: targetBin,
           binaryName: repo,
           version: releaseInfo.tag,
-          assetName: matched.name
+          assetName: safeAssetName
         };
       }
 
-      // Search extracted directory for executable matching repo name or any executable
-      const findExecutable = (dir) => {
+      // Sanitize extracted files against symlink traversal
+      const sanitizeExtractedSymlinks = (dir, root) => {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            const found = findExecutable(fullPath);
-            if (found) return found;
-          } else if (entry.isFile()) {
-            if (entry.name === repo || entry.name === repo.toLowerCase() || entry.name.startsWith(repo)) {
-              return fullPath;
+          try {
+            const lstat = fs.lstatSync(fullPath);
+            if (lstat.isSymbolicLink()) {
+              const realTarget = fs.realpathSync(fullPath);
+              if (!realTarget.startsWith(path.resolve(root))) {
+                fs.unlinkSync(fullPath);
+                continue;
+              }
             }
+            if (entry.isDirectory()) {
+              sanitizeExtractedSymlinks(fullPath, root);
+            }
+          } catch {
+            try { fs.unlinkSync(fullPath); } catch {}
           }
         }
-        // Fallback: first non-document file
-        for (const entry of entries) {
-          if (entry.isFile() && !/\.(txt|md|sha256|json|pdf|png)$/i.test(entry.name)) {
-            return path.join(dir, entry.name);
+      };
+      sanitizeExtractedSymlinks(extractDir, extractDir);
+
+      // Search extracted directory across all nested folders for executable matching repo name
+      const findExecutable = (rootDir) => {
+        const allFiles = [];
+        const scan = (dir) => {
+          try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                scan(fullPath);
+              } else if (entry.isFile()) {
+                allFiles.push({ fullPath, name: entry.name, dir });
+              }
+            }
+          } catch {}
+        };
+        scan(rootDir);
+
+        if (allFiles.length === 0) return null;
+
+        const repoClean = repo.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+        // 1. Exact match with repo name (e.g. "mytool" or "mytool.exe")
+        for (const file of allFiles) {
+          const baseNoExt = file.name.replace(/\.[^.]+$/, '').toLowerCase();
+          if (file.name === repo || file.name.toLowerCase() === repoClean || baseNoExt === repoClean) {
+            return file.fullPath;
           }
         }
+
+        // 2. Starts with repo name
+        for (const file of allFiles) {
+          const lower = file.name.toLowerCase();
+          if (lower.startsWith(repoClean) && !/\.(txt|md|sha256|json|pdf|png|html|yml|yaml)$/i.test(file.name)) {
+            return file.fullPath;
+          }
+        }
+
+        // 3. File inside a bin/ directory
+        for (const file of allFiles) {
+          if (file.dir.split(path.sep).includes('bin') && !/\.(txt|md|sha256|json|pdf|png|html|yml|yaml)$/i.test(file.name)) {
+            return file.fullPath;
+          }
+        }
+
+        // 4. Executable files (mode & 0o111) on POSIX
+        if (process.platform !== 'win32') {
+          for (const file of allFiles) {
+            try {
+              const stat = fs.statSync(file.fullPath);
+              if ((stat.mode & 0o111) !== 0 && !/\.(txt|md|sha256|json|pdf|png|html|yml|yaml)$/i.test(file.name)) {
+                return file.fullPath;
+              }
+            } catch {}
+          }
+        }
+
+        // 5. Fallback: first non-document, non-script file
+        for (const file of allFiles) {
+          if (!/\.(txt|md|sha256|json|pdf|png|html|yml|yaml|sh|bash|zsh|bat|cmd)$/i.test(file.name)) {
+            return file.fullPath;
+          }
+        }
+
+        // 6. Absolute fallback: any non-document file
+        for (const file of allFiles) {
+          if (!/\.(txt|md|sha256|json|pdf|png|html|yml|yaml)$/i.test(file.name)) {
+            return file.fullPath;
+          }
+        }
+
         return null;
       };
 
       const foundBin = findExecutable(extractDir);
       if (!foundBin) {
         return { status: 'error', message: 'Could not find executable in archive' };
+      }
+
+      const resolvedFoundBin = fs.realpathSync(foundBin);
+      if (!resolvedFoundBin.startsWith(path.resolve(extractDir))) {
+        return { status: 'error', message: 'Extracted executable escapes extract directory' };
       }
 
       const binaryName = path.basename(foundBin);
@@ -815,7 +950,7 @@ class ScriptAdapter {
         binaryPath: targetBin,
         binaryName,
         version: releaseInfo.tag,
-        assetName: matched.name
+        assetName: safeAssetName
       };
     } finally {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
@@ -830,13 +965,13 @@ class ScriptAdapter {
     const match = clean.match(/github\.com[/:]([^/]+)\/([^/.]+)/i) || clean.match(/^([^/]+)\/([^/.]+)$/);
     if (!match) return { success: false, error: 'Invalid repo URL' };
 
-    const owner = match[1];
-    const repo = match[2];
+    const owner = encodeURIComponent(match[1]);
+    const repo = encodeURIComponent(match[2]);
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
 
-    const tmpTar = path.join(os.tmpdir(), `ias-tar-${Date.now()}.tar.gz`);
+    const tmpTar = path.join(os.tmpdir(), `ias-tar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.tar.gz`);
     const tarballUrls = [
       `https://github.com/${owner}/${repo}/archive/HEAD.tar.gz`,
       `https://codeload.github.com/${owner}/${repo}/tar.gz/refs/heads/main`,
@@ -857,7 +992,7 @@ class ScriptAdapter {
     }
 
     try {
-      execSync(`tar -xzf "${tmpTar}" --strip-components=1 -C "${destDir}"`, { stdio: 'pipe' });
+      execFileSync('tar', ['-xzf', tmpTar, '--strip-components=1', '-C', destDir], { stdio: 'pipe' });
       return { success: true, destDir };
     } catch (err) {
       return { success: false, error: err.message };
